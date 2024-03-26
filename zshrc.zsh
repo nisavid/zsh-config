@@ -962,6 +962,7 @@ alias tsa='typeset -a'
 alias tsaa='typeset -A'
 alias v=nvim
 alias visudo='sudo visudo'
+alias vnvim="in-dir ${XDG_CONFIG_HOME:-~/.config}/nvim/lua/user nvim +'SessionManager load_current_dir_session<CR>'"
 alias vup="nvim -c 'AstroUpdate' && nvim -c 'TSUpdate' -c 'lua require(\"astronvim.utils.updater\").update_packages()'"
 alias vzsh="in-dir $ZDOTDIR nvim +'SessionManager load_current_dir_session<CR>'"
 alias zup='zsh-update'
