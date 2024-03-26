@@ -289,6 +289,7 @@ if (( $+functions[zi] )); then
       id-as:'localgen-completions' \
       atclone:'
         rm --recursive --force completions && mkdir completions
+        (( $+commands[cog] )) && cog generate-completions zsh >completions/_cog.zsh
         (( $+commands[pip] )) && pip completion --zsh >completions/_pip.zsh
         (( $+commands[pipx] )) && register-python-argcomplete pipx >completions/_pipx.zsh
         (( $+commands[pipenv] )) && _PIPENV_COMPLETE=zsh_source pipenv >completions/_pipenv.zsh
