@@ -882,6 +882,8 @@ alias '???'=sgpts
 alias '????'=sgpt4s
 alias bat-help='bat --plain --language=help'
 alias cat='bat --paging=never'
+alias cdnvim="cd ${XDG_CONFIG_HOME:-~/.config}/nvim/lua/user"
+alias cdzsh="cd $ZDOTDIR"
 alias clamdscan='clamdscan --multiscan --fdpass'
 alias firewall-cmd='sudo firewall-cmd'
 alias g=git
