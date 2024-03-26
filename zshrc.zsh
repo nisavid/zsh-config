@@ -963,7 +963,7 @@ alias tsaa='typeset -A'
 alias v=nvim
 alias visudo='sudo visudo'
 alias vup="nvim -c 'AstroUpdate' && nvim -c 'TSUpdate' -c 'lua require(\"astronvim.utils.updater\").update_packages()'"
-alias vzsh="nvim ${ZDOTDIR:-~}/.zshrc"
+alias vzsh="in-dir $ZDOTDIR nvim +'SessionManager load_current_dir_session<CR>'"
 alias zup='zsh-update'
 
 alias -g -- --help='--help 2>&1 | bat --plain --language=help'
