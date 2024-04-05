@@ -76,6 +76,9 @@ if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
   #[[ -v SSH_CONNECTION ]] || export SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh
 fi
 
+[[ $COLORTERM = *(24bit|truecolor)* ]] \
+  && export MICRO_TRUECOLOR=1
+
 if [[ $XDG_SESSION_TYPE == wayland ]]; then
     export WAYLAND=1
     export QT_QPA_PLATFORM='wayland;xcb'
