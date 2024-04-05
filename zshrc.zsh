@@ -970,7 +970,7 @@ alias tsaa='typeset -A'
 alias v=nvim
 alias visudo='sudo visudo'
 alias vnvim="in-dir ${XDG_CONFIG_HOME:-~/.config}/nvim nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
-alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate'"
+alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate' -c 'Lazy'"
 alias vzsh="in-dir $ZDOTDIR nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
 alias zup='zsh-update'
 
