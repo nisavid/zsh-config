@@ -18,6 +18,7 @@ function {
   local path_prefix_dirs=(
     $BIN_HOME
     $APPIMAGE_HOME
+    ${GOBIN:-~/go/bin}
     $PNPM_HOME
     $KDE_SRC/kdesrc-build
   )
