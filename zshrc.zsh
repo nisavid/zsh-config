@@ -883,7 +883,7 @@ alias '???'=sgpts
 alias '????'=sgpt4s
 alias bat-help='bat --plain --language=help'
 alias cat='bat --paging=never'
-alias cdnvim="cd ${XDG_CONFIG_HOME:-~/.config}/nvim/lua/user"
+alias cdnvim="cd ${XDG_CONFIG_HOME:-~/.config}/nvim"
 alias cdzsh="cd $ZDOTDIR"
 alias clamdscan='clamdscan --multiscan --fdpass'
 alias firewall-cmd='sudo firewall-cmd'
@@ -965,9 +965,9 @@ alias tsa='typeset -a'
 alias tsaa='typeset -A'
 alias v=nvim
 alias visudo='sudo visudo'
-alias vnvim="in-dir ${XDG_CONFIG_HOME:-~/.config}/nvim/lua/user nvim +'SessionManager load_current_dir_session<CR>'"
-alias vup="nvim -c 'AstroUpdate' && nvim -c 'TSUpdate' -c 'lua require(\"astronvim.utils.updater\").update_packages()'"
-alias vzsh="in-dir $ZDOTDIR nvim +'SessionManager load_current_dir_session<CR>'"
+alias vnvim="in-dir ${XDG_CONFIG_HOME:-~/.config}/nvim nvim"
+alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate'"
+alias vzsh="in-dir $ZDOTDIR nvim"
 alias zup='zsh-update'
 
 alias -g -- --help='--help 2>&1 | bat --plain --language=help'
