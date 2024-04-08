@@ -78,6 +78,11 @@ if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
   #[[ -v SSH_CONNECTION ]] || export SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh
 fi
 
+function {
+  local lg_config_dir=${XDG_CONFIG_HOME:-~/.config}/lazygit
+  export LG_CONFIG_FILE=$lg_config_dir/catppuccin-mocha-sapphire.yml,$lg_config_dir/config.yml
+}
+
 [[ $COLORTERM == *(24bit|truecolor)* ]] \
   && export MICRO_TRUECOLOR=1
 
