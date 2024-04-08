@@ -64,7 +64,7 @@ export BROWSER=firefox
 export SYSTEMD_EDITOR=$EDITOR
 
 export FZF_BASE=/usr/share/fzf
-[[ $COLORTERM = *(24bit|truecolor)* ]] \
+[[ $COLORTERM == *(24bit|truecolor)* ]] \
   && export FZF_DEFAULT_OPTS=" \
     --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8 \
     --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc \
@@ -76,7 +76,7 @@ if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
   #[[ -v SSH_CONNECTION ]] || export SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh
 fi
 
-[[ $COLORTERM = *(24bit|truecolor)* ]] \
+[[ $COLORTERM == *(24bit|truecolor)* ]] \
   && export MICRO_TRUECOLOR=1
 
 if [[ $XDG_SESSION_TYPE == wayland ]]; then
