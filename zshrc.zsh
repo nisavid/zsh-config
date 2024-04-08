@@ -869,6 +869,7 @@ alias clamdscan='clamdscan --multiscan --fdpass'
 alias firewall-cmd='sudo firewall-cmd'
 alias g=git
 alias gg=lazygit
+alias gitui='gitui --theme=catppuccin-mocha.ron --watcher'
 alias ind=in-dir
 alias informant='sudo informant'
 alias jc='journalctl --catalog'
