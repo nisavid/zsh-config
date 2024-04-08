@@ -70,6 +70,8 @@ export FZF_BASE=/usr/share/fzf
     --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc \
     --color=marker:#f5e0dc,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8"
 
+export GLAMOUR_STYLE=${XDG_CONFIG_HOME:-~/.config}/glamour/catppuccin-mocha.json
+
 if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
   export GPG_TTY=/dev/${(%):-%l}
   gpg-connect-agent UPDATESTARTUPTTY /bye >/dev/null
@@ -78,19 +80,6 @@ fi
 
 [[ $COLORTERM == *(24bit|truecolor)* ]] \
   && export MICRO_TRUECOLOR=1
-
-if [[ $XDG_SESSION_TYPE == wayland ]]; then
-    export WAYLAND=1
-    export QT_QPA_PLATFORM='wayland;xcb'
-    export GDK_BACKEND='wayland,x11'
-    export MOZ_DBUS_REMOTE=1
-    export MOZ_ENABLE_WAYLAND=1
-    export _JAVA_AWT_WM_NONREPARENTING=1
-    export BEMENU_BACKEND=wayland
-    export CLUTTER_BACKEND=wayland
-    export ECORE_EVAS_ENGINE=wayland_egl
-    export ELM_ENGINE=wayland_egl
-fi
 
 
 ## TERMINAL
@@ -175,19 +164,6 @@ if (( $+functions[zi] )); then
     else zi wait lucid ${ZI_LIGHT:+light-mode} as:'program' from:'gh-r' bpick:'*x86_64-unknown-linux-gnu*' extract:'!' pick:'vivid' for sharkdp/vivid
     fi
     zi wait lucid ${ZI_LIGHT:+light-mode} "${(@)args}" for z-shell/0
-  }
-  function {
-    local destdir=${XDG_CONFIG_HOME:-~/.config}/glamour
-    zi wait lucid ${ZI_LIGHT:+light-mode} \
-      as:'null' \
-      from:'gh-r' \
-      bpick:'mocha.json' \
-      atclone:"
-        mkdir --parents $destdir
-        [[ -e $destdir/catppuccin-mocha.json ]] || ln --symbolic mocha.json(:P) $destdir/catppuccin-mocha.json" \
-      atpull:'%atclone' run-atpull \
-      atload:"export GLAMOUR_STYLE=${(q-)destdir}/catppuccin-mocha.json" \
-      for catppuccin/glamour
   }
 
   ## ZI | SYSTEM
