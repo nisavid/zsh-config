@@ -33,11 +33,15 @@ function {
 
 [[ -r /etc/grc.zsh ]] && source /etc/grc.zsh
 
-POWERLEVEL9K_INSTANT_PROMPT=quiet
+# Load Instant Prompt
+POWERLEVEL9K_INSTANT_PROMPT=verbose
 function {
   readonly instant_prompt_src=${XDG_CACHE_HOME:-~/.cache}/p10k-instant-prompt-nisavid.zsh
   [[ -r $instant_prompt_src ]] && source $instant_prompt_src
 }
+
+# NOTE: From this point until “Load full prompt” near the end of this file,
+# nothing should print any output.
 
 print -v PPNAME /proc/$PPID/exe(N:P:t)
 TMPPREFIX=${XDG_RUNTIME_DIR:-/tmp}/zsh
@@ -974,6 +978,7 @@ if [[ -d $ZDOTDIR/zshrc.d ]]; then
   }
 fi
 
+# Load full prompt
 function {
   local prompt_src
   case $TERM in
