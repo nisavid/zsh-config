@@ -83,7 +83,7 @@ if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
 fi
 
 function {
-  local lg_config_dir=${XDG_CONFIG_HOME:-~/.config}/lazygit
+  readonly lg_config_dir=${XDG_CONFIG_HOME:-~/.config}/lazygit
   export LG_CONFIG_FILE=$lg_config_dir/catppuccin-mocha-sapphire.yml,$lg_config_dir/config.yml
 }
 
@@ -98,7 +98,7 @@ zmodload zsh/parameter
 zmodload zsh/terminfo
 
 function {
-  local -aU terminfo_dirs=( ${(s<:>)TERMINFO_DIRS}(N-/:P) {/etc,/lib,/usr/share}/terminfo(N-/:P) )
+  readonly -aU terminfo_dirs=( ${(s<:>)TERMINFO_DIRS}(N-/:P) {/etc,/lib,/usr/share}/terminfo(N-/:P) )
   export TERMINFO_DIRS=${(j<:>)terminfo_dirs}
 }
 
@@ -156,12 +156,12 @@ if (( $+functions[zi] )); then
   zi ${ZI_LIGHT:+light-mode} \
     if:'(( $+functions[fast-theme] ))' \
     as:'null' \
-    atclone:'() { local destdir=${XDG_CONFIG_HOME:-~/.config}/f-sy-h; mkdir --parents $destdir && cp --force themes/catppuccin-mocha.ini $destdir/; }' \
+    atclone:'() { readonly destdir=${XDG_CONFIG_HOME:-~/.config}/f-sy-h; mkdir --parents $destdir && cp --force themes/catppuccin-mocha.ini $destdir/; }' \
     atpull:'%atclone' \
     atload:'fast-theme --quiet CONFIG:catppuccin-mocha' \
     for catppuccin/zsh-fsh
   function {
-    local -a args=(
+    readonly -a args=(
       id-as:'vivid-lscolors'
       atpull:'rm --force lscolors.zsh'
       run-atpull
@@ -178,7 +178,7 @@ if (( $+functions[zi] )); then
   ## ZI | SYSTEM
 
   function {
-    local script=/usr/share/doc/find-the-command/ftc.zsh
+    readonly script=/usr/share/doc/find-the-command/ftc.zsh
     zi wait lucid ${ZI_LIGHT:+light-mode} \
       id-as:'find-the-command' \
       if:"[[ -r $script ]]" \
@@ -187,7 +187,7 @@ if (( $+functions[zi] )); then
       for z-shell/0
   }
   function {
-    local script=/opt/asdf-vm/asdf.sh
+    readonly script=/opt/asdf-vm/asdf.sh
     zi wait lucid ${ZI_LIGHT:+light-mode} id-as:'asdf' if:"[[ -r $script ]]" pick:"$script" for z-shell/0
   }
   zi wait lucid is-snippet for \
@@ -209,7 +209,7 @@ if (( $+functions[zi] )); then
 
   # KDE
   function {
-    local compdir=$KDE_SRC/kdesrc-build/completions/zsh
+    readonly compdir=$KDE_SRC/kdesrc-build/completions/zsh
     if [[ -d $compdir ]]; then
       zi wait lucid ${ZI_LIGHT:+light-mode} \
         id-as:'kde-buildtools-completions' \
@@ -237,7 +237,7 @@ if (( $+functions[zi] )); then
 
   # Perl
   function {
-    local prefix=${XDG_DATA_HOME:-~/.local/share}/perl5
+    readonly prefix=${XDG_DATA_HOME:-~/.local/share}/perl5
     zi wait lucid ${ZI_LIGHT:+light-mode} \
       id-as:'perlpath' \
       has:'cpanm' \
@@ -252,7 +252,7 @@ if (( $+functions[zi] )); then
 
   # Python
   function {
-    local script=${XDG_CONFIG_HOME:-~/.config}/python/startup.py
+    readonly script=${XDG_CONFIG_HOME:-~/.config}/python/startup.py
     zi wait lucid ${ZI_LIGHT:+light-mode} \
       id-as:'python-startup' \
       as:'null' \
@@ -269,10 +269,10 @@ if (( $+functions[zi] )); then
 
   # Locally generated completions
   function {
-    local -A shtab_cmds_modules=(
+    readonly -A shtab_cmds_modules=(
       pipdeptree pipdeptree._cli.build_parser
     )
-    local tabtab=${XDG_CONFIG_HOME:-~/.config}/tabtab/zsh/__tabtab.zsh
+    readonly tabtab=${XDG_CONFIG_HOME:-~/.config}/tabtab/zsh/__tabtab.zsh
     (( $+commands[shtab] )) \
       || zi wait lucid ${ZI_LIGHT:+light-mode} id-as:'shtab' pip:'shtab' nocompile for sharkdp/shtab
     zi wait lucid ${ZI_LIGHT:+light-mode} \
@@ -465,7 +465,7 @@ typeset -A key=(
   F24 "${terminfo[kf24]}"
 )
 function {
-  local -A extkeys=(
+  readonly -A extkeys=(
     Home kHOM
     End kEND
     Delete kDC
@@ -476,7 +476,7 @@ function {
     PageUp kPRV
     PageDown kNXT
   )
-  local -A modifiers=(
+  readonly -A modifiers=(
     Shift 2
     Alt 3
     Alt-Shift 4
@@ -568,7 +568,7 @@ function caller-name {
 }
 
 function env-system {
-  local -a cmds=(
+  readonly -a cmds=(
     'exec </dev/tty &>/dev/tty'
     'source /etc/zsh/zprofile'
     "${(j< >)${(q)@}}"
