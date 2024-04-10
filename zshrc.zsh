@@ -43,6 +43,10 @@ function {
 # NOTE: From this point until “Load full prompt” near the end of this file,
 # nothing should print any output.
 
+# Fully rebuild the command hash table so that `$commands`
+# is accurate and complete
+hash -rf
+
 
 ## ENVIRONMENT VARIABLES
 
