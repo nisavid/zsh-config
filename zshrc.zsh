@@ -288,7 +288,7 @@ if (( $+functions[zi] )); then
     )
     readonly tabtab=${XDG_CONFIG_HOME:-~/.config}/tabtab/zsh/__tabtab.zsh
     (( $+commands[shtab] )) \
-      || zi wait lucid ${ZI_LIGHT:+light-mode} id-as:'shtab' pip:'shtab' nocompile for sharkdp/shtab
+      || zi wait lucid ${ZI_LIGHT:+light-mode} id-as:'shtab' pip:'shtab' nocompile for iterative/shtab
     zi wait lucid ${ZI_LIGHT:+light-mode} \
       id-as:'localgen-completions' \
       atclone:'
