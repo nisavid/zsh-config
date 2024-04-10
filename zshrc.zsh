@@ -82,7 +82,10 @@ export FZF_BASE=/usr/share/fzf
     --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc \
     --color=marker:#f5e0dc,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8"
 
-export GLAMOUR_STYLE=${XDG_CONFIG_HOME:-~/.config}/glamour/catppuccin-mocha.json
+function {
+  readonly glamour_style=${XDG_CONFIG_HOME:-~/.config}/glamour/catppuccin-mocha.json
+  [[ -r $glamour_style ]] && export GLAMOUR_STYLE=$glamour_style
+}
 
 if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
   export GPG_TTY=/dev/${(%):-%l}
@@ -91,8 +94,11 @@ if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
 fi
 
 function {
-  readonly lg_config_dir=${XDG_CONFIG_HOME:-~/.config}/lazygit
-  export LG_CONFIG_FILE=$lg_config_dir/catppuccin-mocha-sapphire.yml,$lg_config_dir/config.yml
+  readonly lazygit_config_dir=${XDG_CONFIG_HOME:-~/.config}/lazygit
+  readonly lazygit_config=$lg_config_dir/config.yml
+  readonly lazygit_theme_config=$lg_config_dir/catppuccin-mocha-sapphire.yml
+  [[ -r $lazygit_config && -r $lazygit_theme_config ]] \
+    && export LG_CONFIG_FILE=$lazygit_theme_config,$lg_config_dir/config.yml
 }
 
 [[ $COLORTERM == *(24bit|truecolor)* ]] \
