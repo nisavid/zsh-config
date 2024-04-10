@@ -265,6 +265,21 @@ My [**Zsh**] configuration. Fast, convenient, and pretty.
 
 ## 🛠️ Installation
 
+### Installation Method: Using Chezmoi
+
+Install [my dotfiles]. That's all!
+
+Alternatively, include this configuration in your own [**chezmoi**] repository
+using its [corresponding chezmoi-external configuration]
+and [`~/.zshenv` symlink].
+
+[**chezmoi**]: https://chezmoi.io
+[`~/.zshenv` symlink]: https://github.com/nisavid/dotfiles/blob/main/home/symlink_dot_zshenv
+[corresponding chezmoi-external configuration]: https://github.com/nisavid/dotfiles/blob/main/home/.chezmoiexternals/zsh-config.toml
+[my dotfiles]: https://github.com/nisavid/dotfiles
+
+### Installation Method: Manual
+
 #### Clone the configuration
 
 ```shell
