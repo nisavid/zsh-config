@@ -1,7 +1,7 @@
 # Zsh runtime configuration
 
 
-## PATHS & VARIABLES
+## COMMAND PATHS
 
 
 BIN_HOME=~/.local/bin
@@ -42,6 +42,10 @@ function {
 
 # NOTE: From this point until “Load full prompt” near the end of this file,
 # nothing should print any output.
+
+
+## ENVIRONMENT VARIABLES
+
 
 print -v PPNAME /proc/$PPID/exe(N:P:t)
 TMPPREFIX=${XDG_RUNTIME_DIR:-/tmp}/zsh
