@@ -331,7 +331,7 @@ fi
 # Changing Directories
 setopt auto_cd auto_pushd cdable_vars cd_silent pushd_ignore_dups pushd_silent
 # Completion
-setopt always_to_end complete_in_word glob_complete no_list_beep 
+setopt always_to_end complete_in_word glob_complete no_list_beep
 # Expansion and Globbing
 setopt bad_pattern brace_ccl case_paths extended_glob glob_star_short hist_subst_pattern magic_equal_subst numeric_glob_sort rematch_pcre
 # History
@@ -601,7 +601,7 @@ function file-mimetype {
   local mimetype
   [[ -n $ext ]] && mimetype=$ext_mimetype[$ext]
   [[ -n $mimetype ]] || mimetype=$(file --brief --mime-type -- $1)
-  print -rn -- $mimetype 
+  print -rn -- $mimetype
 }
 
 function help {
@@ -686,13 +686,13 @@ function netscan {
     esac
     shift
   done
-  
+
   sudo rustscan -a $args -- --privileged $opts
 }
 compdefas nmap netscan
 
 function netscan-all {
-  netscan -A "$@" 
+  netscan -A "$@"
 }
 compdefas nmap netscan-all
 
@@ -702,7 +702,7 @@ function netscan-hosts {
 compdefas nmap netscan-hosts
 
 function netscan-os {
-  netscan-ports -O --osscan-guess "$@" 
+  netscan-ports -O --osscan-guess "$@"
 }
 compdefas nmap netscan-os
 
