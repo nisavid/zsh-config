@@ -618,6 +618,18 @@ function file-mimetype {
   print -rn -- $mimetype
 }
 
+function ghcs-gh {
+  gh copilot suggest --target=gh -- "$@"
+}
+
+function ghcs-git {
+  gh copilot suggest --target=git -- "$@"
+}
+
+function ghcs-shell {
+  gh copilot suggest --target=shell -- "$@"
+}
+
 function help {
   {
     readonly cmdname=$(realcmdname "$@")
@@ -879,9 +891,9 @@ alias ....='cd ../../..'
 alias .....='cd ../../../..'
 alias -- -='cd -'
 alias '?'=help
-alias '??'='gh copilot suggest --target=shell'
-alias '??gh'='gh copilot suggest --target=gh'
-alias '??git'='gh copilot suggest --target=git'
+alias '??'=ghcs-shell
+alias '??gh'=ghcs-gh
+alias '??git'=ghcs-git
 alias '???'=sgpts
 alias '????'=sgpt4s
 alias bat-help='bat --plain --language=help'
