@@ -6,18 +6,33 @@ My [**Zsh**] configuration. Fast, convenient, and pretty.
 
 <!--toc:start-->
 
-- [☑️ Features](#️-features)
-  - [🫀 Core](#🫀-core)
-  - [⚡️ Performance](#️-performance)
-  - [🏪 Convenience](#🏪-convenience)
-  - [🦋 Visuals](#🦋-visuals)
-- [🛠️ Installation](#🛠️-installation)
+<!--
+XXX: This TOC targets <a id="readme-‥"> tags instead of section headings
+because GitHub's markdown renderer fails to consistently include all emoji
+in the heading IDs that it generates.  For example, it gives the “☑️ Features”
+section a heading ID of `☑️-features` (as expected), but it mysteriously elides
+the emoji when it assigns the “🫀 Core” section a heading ID of `-core`.
+Rather than referencing GitHub's heading IDs (which would break the links
+when this document is rendered by a well-behaved Markdown renderer),
+this TOC links to anchor tags for each of the emoji-decorated section headings.
+
+TODO: Identify/track/report/fix that bug.
+-->
+
+- [☑️ Features](#readme-features)
+  - [🫀 Core](#readme-core)
+  - [⚡️ Performance](#readme-performance)
+  - [🏪 Convenience](#readme-convenience)
+  - [🦋 Visuals](#readme-visuals)
+- [🛠️ Installation](#readme-installation)
   - [Installation Method: Using Chezmoi](#installation-method-using-chezmoi)
   - [Installation Method: Manual](#installation-method-manual)
 
 <!--toc:end-->
 
 ## ☑️ Features
+
+<a id="readme-core"></a>
 
 ### 🫀 Core
 
@@ -29,6 +44,8 @@ My [**Zsh**] configuration. Fast, convenient, and pretty.
 [**Zi**]: https://zshell.dev
 [better-maintained]: https://github.com/orgs/z-shell/discussions/138
 [compare Zi]: https://www.githubcompare.com/z-shell/zi+zdharma-continuum/zinit
+
+<a id="readme-performance"></a>
 
 ### ⚡️ Performance
 
@@ -72,6 +89,8 @@ My [**Zsh**] configuration. Fast, convenient, and pretty.
 [expansions]: https://zsh.sourceforge.io/Doc/Release/Expansion.html#Expansion
 [light loading]: https://wiki.zshell.dev/docs/getting_started/overview#plugin-and-snippet-loading
 [turbo mode]: https://wiki.zshell.dev/docs/getting_started/overview#turbo-mode-zsh--53
+
+<a id="readme-convenience"></a>
 
 ### 🏪 Convenience
 
@@ -220,6 +239,8 @@ My [**Zsh**] configuration. Fast, convenient, and pretty.
 [compare H-S-MW]: https://www.githubcompare.com/z-shell/h-s-mw+zdharma-continuum/history-search-multi-word
 [vi mode]: https://zsh.sourceforge.io/Guide/zshguide04.html#l78
 
+<a id="readme-visuals"></a>
+
 ### 🦋 Visuals
 
 - Prompt theme: [**Powerlevel10k**]
@@ -262,6 +283,8 @@ My [**Zsh**] configuration. Fast, convenient, and pretty.
 [**vivid**]: https://github.com/sharkdp/vivid
 [`bat --plain --language=help`]: https://github.com/sharkdp/bat#highlighting---help-messages
 [compare F-Sy-H]: https://www.githubcompare.com/z-shell/f-sy-h+zdharma-continuum/fast-syntax-highlighting
+
+<a id="readme-installation"></a>
 
 ## 🛠️ Installation
 
