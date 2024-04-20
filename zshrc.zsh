@@ -742,6 +742,57 @@ function netscan-ports-all {
 }
 compdefas nmap netscan-ports-all
 
+function img2webp-drawing-lossless {
+  local -a files_in files_out
+
+  while (( $# )); do
+    [[ -e $1 ]] || { print -Pr -- "%F{red}%Berror:%b file not found:%f ${(q-)1}" >&2; return 1 }
+
+    files_in+=( $1 )
+    files_out+=( ${1:r}.webp )
+
+    shift
+  done
+
+  for (( i = 1; i <= $#files_in; i++ )); do
+    cwebp -preset drawing -lossless -q 100 -progress $files_in[i] -o $files_out[i]
+  done
+}
+
+function img2webp-drawing-nearlossless {
+  local -a files_in files_out
+
+  while (( $# )); do
+    [[ -e $1 ]] || { print -Pr -- "%F{red}%Berror:%b file not found:%f ${(q-)1}" >&2; return 1 }
+
+    files_in+=( $1 )
+    files_out+=( ${1:r}.webp )
+
+    shift
+  done
+
+  for (( i = 1; i <= $#files_in; i++ )); do
+    cwebp -preset drawing -near_lossless 60 -progress $files_in[i] -o $files_out[i]
+  done
+}
+
+function img2webp-drawing-q95 {
+  local -a files_in files_out
+
+  while (( $# )); do
+    [[ -e $1 ]] || { print -Pr -- "%F{red}%Berror:%b file not found:%f ${(q-)1}" >&2; return 1 }
+
+    files_in+=( $1 )
+    files_out+=( ${1:r}.webp )
+
+    shift
+  done
+
+  for (( i = 1; i <= $#files_in; i++ )); do
+    cwebp -preset drawing -q 95 -sharp_yuv -af -sns 100 -mt -progress $files_in[i] -o $files_out[i]
+  done
+}
+
 function pprint-file {
   local -a opts files
   while (( $# )); do
