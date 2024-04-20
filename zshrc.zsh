@@ -898,8 +898,8 @@ alias '???'=sgpts
 alias '????'=sgpt4s
 alias bat-help='bat --plain --language=help'
 alias cat='bat --paging=never'
-alias cdnvim="cd ${XDG_CONFIG_HOME:-~/.config}/nvim"
-alias cdzsh="cd $ZDOTDIR"
+alias cdnvim="cd ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim"
+alias cdzsh="cd ${(q-)ZDOTDIR}"
 alias clamdscan='clamdscan --multiscan --fdpass'
 alias firewall-cmd='sudo firewall-cmd'
 alias g=git
@@ -981,9 +981,9 @@ alias tsa='typeset -a'
 alias tsaa='typeset -A'
 alias v=nvim
 alias visudo='sudo visudo'
-alias vnvim="in-dir ${XDG_CONFIG_HOME:-~/.config}/nvim nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
+alias vnvim="in-dir ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
 alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate' -c 'Lazy'"
-alias vzsh="in-dir $ZDOTDIR nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
+alias vzsh="in-dir ${(q-)ZDOTDIR} nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
 alias zup='zsh-update'
 
 alias -g -- --help='--help 2>&1 | bat --plain --language=help'
