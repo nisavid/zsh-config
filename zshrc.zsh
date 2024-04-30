@@ -1013,6 +1013,7 @@ alias p0='print -rN'
 alias paru='env-system paru'
 alias paru-orphans='paru --query --unrequired --deps'
 alias paru-orphans-remove='paru --remove --nosave --recursive $(paru-orphans)'
+alias paru-rebuild='paru --sync --rebuild $(checkrebuild | sd "^foreign\s+" "")'
 alias pc='whence -v'
 alias pf=pprint-file
 alias pf+='pf --show-all'
