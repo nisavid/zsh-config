@@ -170,6 +170,9 @@ TODO: Identify/track/report/fix that bug.
 
     - `pprint-file` (alias: `pf`): Pretty-print a file
 
+    - `diff-fancy` (alias: `d`): `diff --unified` piped
+      through [`diff-so-fancy`]
+
   - Expressiveness:
 
     - Enabled from the community contributions bundled with Zsh:
@@ -234,6 +237,7 @@ TODO: Identify/track/report/fix that bug.
 [Zsh options]: https://zsh.sourceforge.io/Doc/Release/Options.html
 [Zsh parameters]: https://zsh.sourceforge.io/Doc/Release/Parameters.html#Parameters-Used-By-The-Shell
 [`bracketed-paste-magic`]: https://zsh.sourceforge.io/Doc/Release/User-Contributions.html#Widgets
+[`diff-so-fancy`]: https://github.com/so-fancy/diff-so-fancy
 [`node_modules/.bin`]: https://docs.npmjs.com/cli/configuring-npm/folders
 [`zmv`]: https://zsh.sourceforge.io/Guide/zshguide05.html#l143
 [compare H-S-MW]: https://www.githubcompare.com/z-shell/h-s-mw+zdharma-continuum/history-search-multi-word

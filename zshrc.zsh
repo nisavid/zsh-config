@@ -581,6 +581,10 @@ function caller-name {
   print -r -- ${${funcstack[3,-1]}[(r)^\(*\)]}
 }
 
+function diff-fancy {
+  diff --unified "$@" | diff-so-fancy
+}
+
 function env-system {
   readonly -a cmds=(
     'exec </dev/tty &>/dev/tty'
@@ -953,6 +957,7 @@ alias cdnvim="cd ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim"
 alias cdzsh="cd ${(q-)ZDOTDIR}"
 alias clamdscan='clamdscan --multiscan --fdpass'
 alias firewall-cmd='sudo firewall-cmd'
+alias d=diff-fancy
 alias g=git
 alias gg=lazygit
 alias gitui='gitui --theme=catppuccin-mocha.ron --watcher'
