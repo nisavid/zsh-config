@@ -1037,6 +1037,7 @@ alias ts=typeset
 alias tsa='typeset -a'
 alias tsaa='typeset -A'
 alias v=nvim
+alias vd=vimdiff
 alias visudo='sudo visudo'
 alias vnvim="in-dir ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
 alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate' -c 'Lazy'"
