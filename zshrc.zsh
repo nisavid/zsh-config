@@ -855,7 +855,7 @@ function resolve-aliases {
 }
 
 function sgpt4s {
-  sgpt --model=gpt-4-turbo-preview --shell "$*"
+  sgpt --model=gpt-4-turbo --shell "$*"
 }
 
 function sgpts {
