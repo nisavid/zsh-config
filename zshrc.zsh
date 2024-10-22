@@ -1045,7 +1045,7 @@ alias vzsh="in-dir ${(q-)ZDOTDIR} nvim -c 'lua require(\"resession\").load(vim.f
 alias zup='zsh-update'
 
 alias -g -- --help='--help 2>&1 | bat --plain --language=help'
-alias -g -- --help_='--help 2>&1 | bat --plain --language=help --paging=never'
+alias -g -- --help_='--help 2>&1 | bat --plain --language=help --style=plain --paging=never'
 
 
 ## MISCELLANEA
