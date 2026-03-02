@@ -58,10 +58,96 @@ TMPPREFIX=${XDG_RUNTIME_DIR:-/tmp}/zsh
 
 (( $+commands[lesspipe.sh] )) && export LESSOPEN='| lesspipe.sh %s'
 (( $+commands[src-hilite-lesspipe.sh] )) && export LESSOPEN='| src-hilite-lesspipe.sh %s'
-export LESS='--exit-follow-on-close --incsearch --ignore-case --line-numbers --LONG-PROMPT --modelines=5 --mouse'
-LESS+=' --no-histdups --quiet --quit-if-one-screen --RAW-CONTROL-CHARS --show-preproc-errors --status-column --tabs=4'
-LESS+=' --tilde --use-color --wheel-lines=3 --window=-4 --wordwrap'
-export BAT_PAGER="less -FiMnqR~ -z-4 --incsearch --mouse --no-histdups --show-preproc-errors --status-column --use-color --wheel-lines=3 --wordwrap"
+
+readonly LESS_VERSION=${${"$(less --version 2>/dev/null)"#less }%% *}
+readonly -A LESS_OPTS_BY_VERSION=(
+  8   '--quiet'
+  26  '--LONG-PROMPT'
+  37  '--tabs=4'
+  76  '--ignore-case'
+  103 '--LINE-NUMBERS'
+  136 '--RAW-CONTROL-CHARS'
+  179 '--window=-4'
+  214 '--quit-if-one-screen'
+  356 '--status-column'
+  436 '--tilde'
+  531 '--nohistdups'
+  540 '--mouse'
+  542 '--wheel-lines=3'
+  574 '--incsearch'
+  576 '--use-color'
+  601 '--exit-follow-on-close'
+  620 '--modelines=5'
+  621 '--wordwrap'
+  622 '--show-preproc-errors'
+)
+
+# Filter the given `less` options down to the options that are compatible
+# with the current `less` version.
+function _less_opts_compat {
+  emulate -L zsh
+
+  local -a desired_opts filtered_opts
+  desired_opts=( "${(@)argv}" )
+
+  local version
+  for version in ${(on)${(k)less_opts_by_version}}; do
+    (( version > LESS_VERSION )) && break
+    for opt in ${(z)less_opts_by_version[$v]}; do
+      (( ${wanted[(I)$opt]} )) || continue
+      filtered_opts+=( "$opt" )
+    done
+  done
+
+  print -r -- "${(j< >)filtered_opts}"
+}
+
+function {
+  local -a less_opts=(
+    --exit-follow-on-close
+    --incsearch
+    --ignore-case
+    --LINE-NUMBERS
+    --LONG-PROMPT
+    --modelines=5
+    --mouse
+    --nohistdups
+    --quiet
+    --quit-if-one-screen
+    --RAW-CONTROL-CHARS
+    --show-preproc-errors
+    --status-column
+    --tabs=4
+    --tilde
+    --use-color
+    --wheel-lines=3
+    --window=-4
+    --wordwrap
+  )
+  export LESS=$(_less_opts_compat "${less_opts[@]}")
+}
+
+function {
+  local -a bat_less_opts=(
+    --quit-if-one-screen
+    --ignore-case
+    --LONG-PROMPT
+    --LINE-NUMBERS
+    --quiet
+    --RAW-CONTROL-CHARS
+    --tilde
+    --window=-4
+    --incsearch
+    --mouse
+    --nohistdups
+    --show-preproc-errors
+    --status-column
+    --use-color
+    --wheel-lines=3
+    --wordwrap
+  )
+  export BAT_PAGER="less $(_less_opts_compat "${bat_less_opts[@]}")"
+}
 
 export GROFF_NO_SGR=1
 
