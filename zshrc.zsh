@@ -33,9 +33,15 @@ function {
 
 [[ -r /etc/grc.zsh ]] && source /etc/grc.zsh
 
+: ${WARP_COMPAT:-0}
+[[ $TERM_PROGRAM == Warp* || ($TERM_PROGRAM == tmux && $TMUX == *warp*) ]] && WARP_COMPAT=1
+export WARP_COMPAT
+
 # Load Instant Prompt
 POWERLEVEL9K_INSTANT_PROMPT=verbose
 function {
+  (( WARP_COMPAT )) && return
+
   readonly instant_prompt_src=${XDG_CACHE_HOME:-~/.cache}/p10k-instant-prompt-nisavid.zsh
   [[ -r $instant_prompt_src ]] && source $instant_prompt_src
 }
@@ -234,15 +240,20 @@ if (( $+functions[zi] )); then
   ## ZI | ZSH
 
   zi wait:'1' pack atload=+'zicompinit_fast; zicdreplay' for system-completions
-  zi ${ZI_LIGHT:+light-mode} for z-shell/z-a-meta-plugins @annexes
-  # XXX: z-shell/zsh-fancy-completions (included by @zsh-users+fast) tries
-  #   to run `ypcat` (nonexistent command) when populating hosts lists
-  #   for e.g. `ssh` completion, which triggers `find-the-command` and breaks
-  #   the completion.  Not sure how to fix this properly.  For now, create
-  #   this symlink as a workaround.
-  (( $+commands[ypcat] )) || ln --symbolic =false $BIN_HOME/ypcat
-  zi ${ZI_LIGHT:+light-mode} for @zsh-users+fast
-  zi ${ZI_LIGHT:+light-mode} for @romkatv
+  if (( WARP_COMPAT )); then
+    # With the syntax highlighting (original or fast) or autosuggestion plugins, Warp renders the prompt decorations af
+    zi ${ZI_LIGHT:+light-mode} for zsh-users/zsh-completions
+  else
+    zi ${ZI_LIGHT:+light-mode} for z-shell/z-a-meta-plugins @annexes
+    # XXX: z-shell/zsh-fancy-completions (included by @zsh-users+fast) tries
+    #   to run `ypcat` (nonexistent command) when populating hosts lists
+    #   for e.g. `ssh` completion, which triggers `find-the-command` and breaks
+    #   the completion.  Not sure how to fix this properly.  For now, create
+    #   this symlink as a workaround.
+    (( $+commands[ypcat] )) || ln --symbolic =false $BIN_HOME/ypcat
+    zi ${ZI_LIGHT:+light-mode} for @zsh-users+fast
+    zi ${ZI_LIGHT:+light-mode} for @romkatv
+  fi
   zi ${ZI_LIGHT:+light-mode} for z-shell/H-S-MW
   zi ${ZI_LIGHT:+light-mode} for zsh-vi-more/evil-registers
   zi ${ZI_LIGHT:+light-mode} for zsh-vi-more/vi-motions
@@ -1148,6 +1159,8 @@ fi
 
 # Load full prompt
 function {
+  (( WARP_COMPAT )) && return
+
   local prompt_src
   case $TERM in
     (linux) prompt_src=$ZDOTDIR/p10k-plain.zsh ;;
