@@ -1041,7 +1041,8 @@ alias vd=vimdiff
 alias visudo='sudo visudo'
 alias vnvim="in-dir ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
 alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate' -c 'Lazy'"
-alias vzsh="in-dir ${(q-)ZDOTDIR} nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
+#alias vzsh="in-dir ${(q-)ZDOTDIR} nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
+alias vzsh='v -p ~/.config/zsh/zshrc.{zsh,d/*}'
 alias zup='zsh-update'
 
 alias -g -- --help='--help 2>&1 | bat --plain --language=help'
