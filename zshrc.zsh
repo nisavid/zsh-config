@@ -1058,7 +1058,7 @@ if [[ -d $ZDOTDIR/zshrc.d ]]; then
   function {
     local zshrc
     for zshrc in $ZDOTDIR/zshrc.d/*; do
-      [[ -r $zshrc ]] && source $zshrc
+      [[ -r $zshrc && ! -e $zshrc.disabled ]] && source $zshrc
     done
   }
 fi

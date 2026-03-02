@@ -1,1 +1,2 @@
 .zcompdump
+zshrc.d/*.disabled
