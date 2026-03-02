@@ -1038,6 +1038,7 @@ alias '??git'=ghcs-git
 alias '???'=sgpts
 alias '????'=sgpt4s
 alias bat-help='bat --plain --language=help'
+alias brewup='brew update && brew upgrade'
 alias cat='bat --paging=never'
 alias cdnvim="cd ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim"
 alias cdzsh="cd ${(q-)ZDOTDIR}"
