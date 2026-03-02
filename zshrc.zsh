@@ -326,7 +326,7 @@ if (( $+functions[zi] )); then
       (( $+commands[gh] )) && gh copilot --version >/dev/null \
         && gh copilot alias -- zsh >scripts/gh-copilot-aliases.zsh
       cp 0.plugin.zsh init.zsh'"
-      print 'integer ret; for script in \${0:h}/scripts/*; do source \$script; ret=\$\(( ret + ? )); done; \(( ! ret ))' >>init.zsh" \
+      print 'integer ret; for script in \${0:h}/scripts/*\(N); do source \$script; ret=\$\(( ret + ? )); done; \(( ! ret ))' >>init.zsh" \
     atpull:'%atclone' run-atpull \
     src:'init.zsh' \
     for z-shell/0
