@@ -392,7 +392,7 @@ autoload -Uz add-zsh-hook
 autoload -Uz bracketed-paste-magic
 autoload -Uz catch
 autoload -Uz regexp-replace
-unalias run-help
+alias run-help >/dev/null && unalias run-help
 autoload -Uz run-help
 autoload -Uz ${^fpath}/run-help-*(N:t)
 autoload -Uz throw
