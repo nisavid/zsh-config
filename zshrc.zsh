@@ -639,6 +639,28 @@ function compdefas { (( $+_comps[$1] )) && compdef $_comps[$1] ${^@[2,-1]}=$1 }
 
 ## FUNCTIONS
 
+if (( $+commands[pass] )); then
+  function export-secret-from-pass {
+    readonly var=$1 name=$2
+    export $var=$(pass $name)
+  }
+
+  function wrap-with-secret-from-pass {
+    readonly cmd=$1 var=$2 name=$3
+    eval "
+    function $cmd {
+      local -i use_pass=0
+      [[ -v $var ]] || use_pass=1
+      (( use_pass )) && export-secret-from-pass $var $name
+      command $cmd \"\$@\"
+      (( use_pass )) && unset $var
+    }"
+  }
+
+  wrap-with-secret-from-pass nano-pdf GEMINI_API_KEY api/gemini/GEMINI_API_KEY
+  wrap-with-secret-from-pass openclaw JINA_API_KEY api/jina/JINA_API_KEY
+fi
+
 if (( $+commands[kwallet-query] )); then
   function export-secret-from-kwallet {
     readonly var=$1 folder=$2 entry=$3
