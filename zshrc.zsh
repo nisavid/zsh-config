@@ -916,6 +916,41 @@ function img2webp-drawing-q95 {
     cwebp -preset drawing -q 95 -sharp_yuv -af -sns 100 -mt -progress $files_in[i] -o $files_out[i]
   done
 }
+function pty-readall {
+  emulate -L zsh
+
+  zmodload zsh/zpty || return
+
+  local name=pty-readall-$$-$RANDOM buf
+  integer idle=0
+  zpty -b $name "${(@q)argv}" || return
+  {
+    while (( idle < 40 )); do
+      if zpty -r $name buf; then
+        if [[ $buf == *$'\e]11;?\e\\'* ]]; then
+          zpty -w -n $name $'\e]11;rgb:1e1e/1e1e/2e2e\e\\'
+          buf=${buf//$'\e]11;?\e\\'/}
+        fi
+        if [[ $buf == *$'\e[6n'* ]]; then
+          zpty -w -n $name $'\e[1;1R'
+          buf=${buf//$'\e[6n'/}
+        fi
+        print -rn -- $buf
+        idle=0
+      elif zpty -t $name; then
+        sleep 0.05
+        (( idle++ ))
+      else
+        while zpty -r $name buf; do
+          print -rn -- $buf
+        done
+        break
+      fi
+    done
+  } always {
+    zpty -d $name &>/dev/null
+  }
+}
 
 function pprint-file {
   local -a opts files
@@ -936,7 +971,7 @@ function pprint-file {
         [[ -d $tmpdir ]] || { tmpdir=$(mktempd) || return; trap 'rm --recursive --force -- $tmpdir' EXIT }
         tmpfile=$tmpdir/${file#/}
         mkdir --parents -- $tmpfile:h
-        command glow --style=$GLAMOUR_STYLE $file >$tmpfile
+        { pty-readall command glow --style=$GLAMOUR_STYLE $file || command glow --style=$GLAMOUR_STYLE $file } | tr -d '\r' >! $tmpfile
         out_files+=( $tmpfile )
         ;;
       (*) out_files+=( $file )
