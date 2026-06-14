@@ -3,6 +3,7 @@
 
 ## COMMAND PATHS
 
+zmodload zsh/parameter
 
 BIN_HOME=~/.local/bin
 [[ -d $BIN_HOME ]] || mkdir --parents $BIN_HOME
@@ -12,15 +13,20 @@ APPIMAGE_HOME=~/.local/bin/appimage
 
 export PNPM_HOME=${XDG_DATA_HOME:-~/.local/share}/pnpm
 
+export KREW_ROOT=${XDG_DATA_HOME:-~/.local/share}/krew
+
 export KDE_SRC=~/src/kde
 
 function {
   local path_prefix_dirs=(
     $BIN_HOME
     $APPIMAGE_HOME
+    ~/.cargo/bin
     ${GOBIN:-~/go/bin}
-    $PNPM_HOME
+    $PNPM_HOME/bin
     $KDE_SRC/kdesrc-build
+    $KREW_ROOT/bin
+    ~/.lmstudio/bin
   )
 
   integer i;
@@ -31,7 +37,14 @@ function {
   path=( $path_prefix_dirs $path )
 }
 
-[[ -r /etc/grc.zsh ]] && source /etc/grc.zsh
+# TODO: move to lazy init
+if (( $+commands[rgrc] )); then eval "$(rgrc --aliases)"
+elif [[ -r /etc/grc.zsh ]]; then source /etc/grc.zsh
+fi
+
+# TODO: move to lazy init
+[[ -s /opt/adguard-cli/bash-completion.sh ]] && source /opt/adguard-cli/bash-completion.sh
+[[ -r ~/.config/broot/launcher/bash/br ]] && source ~/.config/broot/launcher/bash/br
 
 : ${WARP_COMPAT:-0}
 [[ $TERM_PROGRAM == Warp* || ($TERM_PROGRAM == tmux && $TMUX == *warp*) ]] && WARP_COMPAT=1
@@ -179,10 +192,29 @@ function {
   [[ -r $glamour_style ]] && export GLAMOUR_STYLE=$glamour_style
 }
 
+
+if [[ ! -v SSH_CONNECTION ]] && (( $+commands[ssh-tpm-agent] )); then
+  export SSH_AUTH_SOCK=$(ssh-tpm-agent --print-socket)
+fi
 if [[ -d ~/.gnupg ]] && (( $+commands[gpg-connect-agent] )); then
   export GPG_TTY=/dev/${(%):-%l}
   gpg-connect-agent UPDATESTARTUPTTY /bye >/dev/null
-  #[[ -v SSH_CONNECTION ]] || export SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/gnupg/S.gpg-agent.ssh
+  if [[ ! -v SSH_CONNECTION && -z $SSH_AUTH_SOCK ]]; then
+    export SSH_AUTH_SOCK=${XDG_RUNTIME_DIR:-/tmp}/gnupg/S.gpg-agent.ssh
+  fi
+fi
+if [[ ! -v SSH_CONNECTION && -z $SSH_AUTH_SOCK ]] && (( $+commands[ssh-agent] )); then
+  readonly ssh_agent_env=${XDG_RUNTIME_DIR:-/tmp}/ssh-agent.$UID.env
+  if [[ -e $ssh_agent_env ]]; then
+    source $ssh_agent_env &>/dev/null
+    if ! kill -0 $SSH_AGENT_PID; then
+      unset SSH_AGENT_PID SSH_AUTH_SOCK
+    fi
+  fi
+  if [[ -z $SSH_AUTH_SOCK ]]; then
+    ssh-agent -s >! $ssh_agent_env
+    source $ssh_agent_env &>/dev/null
+  fi
 fi
 
 function {
@@ -200,7 +232,6 @@ function {
 ## TERMINAL
 
 
-zmodload zsh/parameter
 zmodload zsh/terminfo
 
 function {
@@ -272,7 +303,7 @@ if (( $+functions[zi] )); then
     atload:'fast-theme --quiet CONFIG:catppuccin-mocha' \
     for catppuccin/zsh-fsh
   function {
-    readonly -a args=(
+    local -a args=(
       id-as:'vivid-lscolors'
       atpull:'rm --force lscolors.zsh'
       run-atpull
@@ -639,61 +670,69 @@ function compdefas { (( $+_comps[$1] )) && compdef $_comps[$1] ${^@[2,-1]}=$1 }
 
 ## FUNCTIONS
 
-if (( $+commands[pass] )); then
-  function export-secret-from-pass {
-    readonly var=$1 name=$2
-    export $var=$(pass $name)
-  }
+#if (( $+commands[pass] )); then
+#  function export-secret-from-pass {
+#    readonly var=$1 name=$2
+#    export $var=$(pass $name)
+#  }
+#
+#  function wrap-with-secret-from-pass {
+#    readonly cmd=$1 var=$2 name=$3
+#    eval "
+#    function $cmd {
+#      local -i use_pass=0
+#      [[ -v $var ]] || use_pass=1
+#      (( use_pass )) && export-secret-from-pass $var $name
+#      command $cmd \"\$@\"
+#      (( use_pass )) && unset $var
+#    }"
+#  }
+#
+#  wrap-with-secret-from-pass nano-pdf GEMINI_API_KEY api/gemini/GEMINI_API_KEY
+#  wrap-with-secret-from-pass openclaw JINA_API_KEY api/jina/JINA_API_KEY
+#fi
 
-  function wrap-with-secret-from-pass {
-    readonly cmd=$1 var=$2 name=$3
-    eval "
-    function $cmd {
-      local -i use_pass=0
-      [[ -v $var ]] || use_pass=1
-      (( use_pass )) && export-secret-from-pass $var $name
-      command $cmd \"\$@\"
-      (( use_pass )) && unset $var
-    }"
-  }
+#if (( $+commands[kwallet-query] )); then
+#  function export-secret-from-kwallet {
+#    readonly var=$1 folder=$2 entry=$3
+#    export $var=$(kwallet-query kdewallet -f $folder -r $entry 2>/dev/null)
+#  }
+#
+#  function wrap-with-secret-from-kwallet {
+#    readonly cmd=$1 var=$2 folder=$3 entry=$4
+#    eval "
+#    function $cmd {
+#      local -i use_kwallet=0
+#      [[ -v $var ]] || use_kwallet=1
+#      (( use_kwallet )) && export-secret-from-kwallet $var $folder $entry
+#      command $cmd \"\$@\"
+#      (( use_kwallet )) && unset $var
+#    }"
+#  }
+#
+#  wrap-with-secret-from-kwallet parcel FIREBASE_API_KEY firebase-api api_key
+#  wrap-with-secret-from-kwallet pnpm FIREBASE_API_KEY firebase-api api_key
+#  (( $+commands[sgpt] )) && wrap-with-secret-from-kwallet sgpt OPENAI_API_KEY openai-api api_key
+#fi
 
-  wrap-with-secret-from-pass nano-pdf GEMINI_API_KEY api/gemini/GEMINI_API_KEY
-  wrap-with-secret-from-pass openclaw JINA_API_KEY api/jina/JINA_API_KEY
-fi
+#if (( $+commands[bw] )); then
+#  function bw {
+#    if [[ -z $BW_CLIENTID ]] && (( $+commands[kwallet-query] )); then
+#      export BW_CLIENTID=$(kwallet-query kdewallet -f bitwarden-api -r client_id 2>/dev/null)
+#      export BW_CLIENTSECRET=$(kwallet-query kdewallet -f bitwarden-api -r client_secret 2>/dev/null)
+#    fi
+#    if [[ -n $BW_CLIENTID && -z $BW_SESSION ]] && (( $+commands[kwallet-query] )); then
+#      export BW_SESSION=$(command bw unlock $(kwallet-query kdewallet -f bitwarden-api -r password 2>/dev/null) --raw)
+#    fi
+#    command bw "$@"
+#  }
+#fi
 
-if (( $+commands[kwallet-query] )); then
-  function export-secret-from-kwallet {
-    readonly var=$1 folder=$2 entry=$3
-    export $var=$(kwallet-query kdewallet -f $folder -r $entry 2>/dev/null)
-  }
-
-  function wrap-with-secret-from-kwallet {
-    readonly cmd=$1 var=$2 folder=$3 entry=$4
-    eval "
-    function $cmd {
-      local -i use_kwallet=0
-      [[ -v $var ]] || use_kwallet=1
-      (( use_kwallet )) && export-secret-from-kwallet $var $folder $entry
-      command $cmd \"\$@\"
-      (( use_kwallet )) && unset $var
-    }"
-  }
-
-  wrap-with-secret-from-kwallet parcel FIREBASE_API_KEY firebase-api api_key
-  wrap-with-secret-from-kwallet pnpm FIREBASE_API_KEY firebase-api api_key
-  (( $+commands[sgpt] )) && wrap-with-secret-from-kwallet sgpt OPENAI_API_KEY openai-api api_key
-fi
-
-if (( $+commands[bw] )); then
-  function bw {
-    if [[ -z $BW_CLIENTID ]] && (( $+commands[kwallet-query] )); then
-      export BW_CLIENTID=$(kwallet-query kdewallet -f bitwarden-api -r client_id 2>/dev/null)
-      export BW_CLIENTSECRET=$(kwallet-query kdewallet -f bitwarden-api -r client_secret 2>/dev/null)
-    fi
-    if [[ -n $BW_CLIENTID && -z $BW_SESSION ]] && (( $+commands[kwallet-query] )); then
-      export BW_SESSION=$(command bw unlock $(kwallet-query kdewallet -f bitwarden-api -r password 2>/dev/null) --raw)
-    fi
-    command bw "$@"
+if (( $+commands[gh] )); then
+  function {
+    local token
+    token=$(gh auth token 2>/dev/null) || return
+    export GITHUB_TOKEN=$token
   }
 fi
 
@@ -1115,6 +1154,7 @@ alias clamdscan='clamdscan --multiscan --fdpass'
 alias firewall-cmd='sudo firewall-cmd'
 alias d=diff-fancy
 alias g=git
+alias gearlever='flatpak run it.mijorus.gearlever'
 alias gg=lazygit
 alias gitui='gitui --theme=catppuccin-mocha.ron --watcher'
 alias ind=in-dir
@@ -1209,7 +1249,7 @@ alias -g -- --help_='--help 2>&1 | bat --plain --language=help --style=plain --p
 if [[ -d $ZDOTDIR/zshrc.d ]]; then
   function {
     local zshrc
-    for zshrc in $ZDOTDIR/zshrc.d/*; do
+    for zshrc in $ZDOTDIR/zshrc.d/*.zsh; do
       [[ -r $zshrc && ! -e $zshrc.disabled ]] && source $zshrc
     done
   }
