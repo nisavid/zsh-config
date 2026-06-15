@@ -274,6 +274,7 @@ if (( $+functions[zi] )); then
   if (( WARP_COMPAT )); then
     # With the syntax highlighting (original or fast) or autosuggestion plugins, Warp renders the prompt decorations af
     zi ${ZI_LIGHT:+light-mode} for zsh-users/zsh-completions
+    zi ${ZI_LIGHT:+light-mode} for z-shell/z-a-bin-gem-node
   else
     zi ${ZI_LIGHT:+light-mode} for z-shell/z-a-meta-plugins @annexes
     # XXX: z-shell/zsh-fancy-completions (included by @zsh-users+fast) tries
@@ -305,9 +306,9 @@ if (( $+functions[zi] )); then
   function {
     local -a args=(
       id-as:'vivid-lscolors'
-      atpull:'rm --force lscolors.zsh'
+      atclone:'print export LS_COLORS="${(qq)$(vivid generate catppuccin-mocha)}" >lscolors.zsh'
+      atpull:'%atclone'
       run-atpull
-      atload:'[[ -e lscolors.zsh ]] || print export LS_COLORS="${(qq)$(vivid generate catppuccin-mocha)}" >lscolors.zsh'
       pick:'lscolors.zsh'
     )
     if (( $+commands[vivid] )); then :
@@ -395,16 +396,17 @@ if (( $+functions[zi] )); then
   # Python
   function {
     readonly script=${XDG_CONFIG_HOME:-~/.config}/python/startup.py
-    zi wait lucid ${ZI_LIGHT:+light-mode} \
-      id-as:'python-startup' \
-      as:'null' \
-      atclone:"
-        mkdir --parents $script:h
-        rm --force $script
-        python -m fancycompleter install --force &>/dev/null && mv ~/python_startup.py $script" \
-      atpull:'%atclone' run-atpull \
-      atload:"export PYTHONSTARTUP=${(q-)script}" \
-      for z-shell/0
+    if [[ ! -e $script ]]; then
+      mkdir --parents $script:h
+      if python -c 'import fancycompleter' &>/dev/null \
+        && python -m fancycompleter install --force &>/dev/null \
+        && [[ -e ~/python_startup.py ]]; then
+        mv ~/python_startup.py $script
+      else
+        print -r -- '# fancycompleter is not available; this PYTHONSTARTUP file is intentionally empty.' >$script
+      fi
+    fi
+    export PYTHONSTARTUP=$script
   }
 
   ## ZI | MISCELLANEA
@@ -452,8 +454,12 @@ if (( $+functions[zi] )); then
     id-as:'localgen-zshrc' \
     atclone:'
       rm --recursive --force scripts && mkdir scripts
-      (( $+commands[gh] )) && gh copilot --version >/dev/null \
-        && gh copilot alias -- zsh >scripts/gh-copilot-aliases.zsh
+      if (( $+commands[gh] )) && gh copilot --version &>/dev/null; then
+        {
+          gh copilot -- alias -- zsh 2>/dev/null ||
+            gh copilot alias -- zsh 2>/dev/null
+        } >scripts/gh-copilot-aliases.zsh || rm --force scripts/gh-copilot-aliases.zsh
+      fi
       cp 0.plugin.zsh init.zsh'"
       print 'integer ret; for script in \${0:h}/scripts/*\(N); do source \$script; ret=\$\(( ret + ? )); done; \(( ! ret ))' >>init.zsh" \
     atpull:'%atclone' run-atpull \
