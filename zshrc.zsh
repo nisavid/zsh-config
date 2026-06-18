@@ -11,7 +11,13 @@ BIN_HOME=~/.local/bin
 APPIMAGE_HOME=~/.local/bin/appimage
 [[ -d $APPIMAGE_HOME ]] || mkdir --parents $APPIMAGE_HOME
 
-export PNPM_HOME=${XDG_DATA_HOME:-~/.local/share}/pnpm
+if [[ -z $PNPM_HOME ]]; then
+  case $OSTYPE in
+    darwin*) PNPM_HOME=~/Library/pnpm ;;
+    *) PNPM_HOME=${XDG_DATA_HOME:-~/.local/share}/pnpm ;;
+  esac
+fi
+export PNPM_HOME
 
 export KREW_ROOT=${XDG_DATA_HOME:-~/.local/share}/krew
 
@@ -25,8 +31,9 @@ function {
     ${GOBIN:-~/go/bin}
     $PNPM_HOME/bin
     $KDE_SRC/kdesrc-build
-    $KREW_ROOT/bin
+    ${KREW_ROOT:-$HOME/.krew}/bin
     ~/.lmstudio/bin
+    /opt/homebrew/bin
   )
 
   integer i;
