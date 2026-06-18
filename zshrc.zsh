@@ -770,12 +770,14 @@ function env-system {
 typeset -A ext_mimetype
 function {
   readonly -a files=( /etc/mime.types ~/.mime.types )
+  local -a readable_files=( ${^files}(N-.) )
+  (( #readable_files )) || return
   readonly token_pat='[^][:cntrl:][:space:]()<>@,;:\\"/?=[]##'
   # XXX: This is extracted to a constant and weirdly quoted/escaped merely to appease Neovim's deficient parsing of Zsh extended globs
   readonly pat="(#b)(${~token_pat}/${~token_pat}"')(([[:space:]]##'"${~token_pat}"')##)'
   local line mimetype ext
   local -a exts
-  <${^files}(N-.) while read -r line; do
+  <${^readable_files} while read -r line; do
     if [[ $line == $~pat ]]; then
       mimetype=$match[1]
       exts=( ${(z)match[2]} )
