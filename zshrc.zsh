@@ -6,10 +6,10 @@
 zmodload zsh/parameter
 
 BIN_HOME=~/.local/bin
-[[ -d $BIN_HOME ]] || mkdir --parents $BIN_HOME
+[[ -d $BIN_HOME ]] || mkdir -p -- "$BIN_HOME"
 
 APPIMAGE_HOME=~/.local/bin/appimage
-[[ -d $APPIMAGE_HOME ]] || mkdir --parents $APPIMAGE_HOME
+[[ -d $APPIMAGE_HOME ]] || mkdir -p -- "$APPIMAGE_HOME"
 
 if [[ -z $PNPM_HOME ]]; then
   case $OSTYPE in
@@ -306,7 +306,7 @@ if (( $+functions[zi] )); then
   zi ${ZI_LIGHT:+light-mode} \
     if:'(( $+functions[fast-theme] ))' \
     as:'null' \
-    atclone:'() { readonly destdir=${XDG_CONFIG_HOME:-~/.config}/f-sy-h; mkdir --parents $destdir && cp --force themes/catppuccin-mocha.ini $destdir/; }' \
+    atclone:'() { readonly destdir=${XDG_CONFIG_HOME:-~/.config}/f-sy-h; mkdir -p -- "$destdir" && cp --force themes/catppuccin-mocha.ini "$destdir/"; }' \
     atpull:'%atclone' \
     atload:'fast-theme --quiet CONFIG:catppuccin-mocha' \
     for catppuccin/zsh-fsh
@@ -404,7 +404,7 @@ if (( $+functions[zi] )); then
   function {
     readonly script=${XDG_CONFIG_HOME:-~/.config}/python/startup.py
     if [[ ! -e $script ]]; then
-      mkdir --parents $script:h
+      mkdir -p -- $script:h
       if python -c 'import fancycompleter' &>/dev/null \
         && python -m fancycompleter install --force &>/dev/null \
         && [[ -e ~/python_startup.py ]]; then
@@ -450,7 +450,7 @@ if (( $+functions[zi] )); then
         fi
         cp 0.plugin.zsh init.zsh'"
         print 'fpath[1,0]=( \${0:h}/completions )' >>init.zsh
-        [[ -f $tabtab ]] || { mkdir --parents $tabtab:h && touch $tabtab }" \
+        [[ -f $tabtab ]] || { mkdir -p -- $tabtab:h && touch $tabtab }" \
       atpull:'%atclone' run-atpull \
       multisrc:"init.zsh $tabtab" \
       for z-shell/0
@@ -849,7 +849,7 @@ function journalctl {
 }
 
 function mkcd {
-  mkdir --parents $args[2,-1] -- $1 && cd $1
+  mkdir -p -- $args[2,-1] "$1" && cd "$1"
 }
 
 function mktemp {
@@ -1022,7 +1022,7 @@ function pprint-file {
       (text/markdown)
         [[ -d $tmpdir ]] || { tmpdir=$(mktempd) || return; trap 'rm --recursive --force -- $tmpdir' EXIT }
         tmpfile=$tmpdir/${file#/}
-        mkdir --parents -- $tmpfile:h
+        mkdir -p -- $tmpfile:h
         { pty-readall command glow --style=$GLAMOUR_STYLE $file || command glow --style=$GLAMOUR_STYLE $file } | tr -d '\r' >! $tmpfile
         out_files+=( $tmpfile )
         ;;
@@ -1123,14 +1123,14 @@ function zi-update {
 
 function zsh-config-update {
   [[ -d $ZDOTDIR_ORIGIN ]] || return
-  [[ -d $ZDOTDIR:h ]] || mkdir --parents -- $ZDOTDIR:h || return
+  [[ -d $ZDOTDIR:h ]] || mkdir -p -- $ZDOTDIR:h || return
   [[ -e $ZDOTDIR && ! -w $ZDOTDIR ]] && { print -r "error: not writable:" ${(q-)ZDOTDIR}; return }
 
   readonly tmp=$ZDOTDIR.$RANDOM || return
   trap 'rm --recursive --force -- $tmp' EXIT
   cp --archive -- $ZDOTDIR_ORIGIN $tmp || return
   if [[ -d $ZDOTDIR/zshrc.d ]]; then
-    mkdir --parents -- $tmp/zshrc.d || return
+    mkdir -p -- $tmp/zshrc.d || return
     cp --archive --update -- $ZDOTDIR/zshrc.d/* $tmp/zshrc.d/ || return
   fi
   rm --recursive --force -- $ZDOTDIR || return
@@ -1221,7 +1221,7 @@ alias ltal='lta --long'
 alias ltal+='ltal --total-size'
 alias ltl='lt --long'
 alias ltl+='ltl --total-size'
-alias mkd='mkdir --parents'
+alias mkd='mkdir -p --'
 alias p='print -r'
 alias p0='print -rN'
 alias pc='whence -v'
