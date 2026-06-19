@@ -15,7 +15,5 @@
 
 ZDOTDIR=${XDG_CONFIG_HOME:-~/.config}/zsh
 
-. "$HOME/.local/bin/env"
-
 # Vite+ bin (https://viteplus.dev)
 . "$HOME/.vite-plus/env"
