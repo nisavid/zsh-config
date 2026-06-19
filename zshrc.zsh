@@ -357,6 +357,14 @@ if (( $+functions[zi] )); then
   # Elm
   zi wait lucid ${ZI_LIGHT:+light-mode} atload:'elm-completion-update 2>/dev/null' for kraklin/elm.plugin.zsh
 
+  # Node (fnm)
+  zi wait lucid ${ZI_LIGHT:+light-mode} \
+    id-as:'fnm' \
+    has:'fnm' \
+    as:'null' \
+    atload:'eval "$(fnm env --shell zsh --use-on-cd)"' \
+    for z-shell/0
+
   # KDE
   function {
     readonly compdir=$KDE_SRC/kdesrc-build/completions/zsh
