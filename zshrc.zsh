@@ -30,6 +30,7 @@ function {
     ~/.cargo/bin
     ${GOBIN:-~/go/bin}
     $PNPM_HOME/bin
+    ~/.vite-plus/bin
     $KDE_SRC/kdesrc-build
     ${KREW_ROOT:-$HOME/.krew}/bin
     ~/.lmstudio/bin
@@ -364,6 +365,14 @@ if (( $+functions[zi] )); then
     as:'null' \
     atload:'eval "$(fnm env --shell zsh --use-on-cd)"' \
     for z-shell/0
+
+  # Vite+ — wait'2' so it loads after compinit (wait'1') and its vp/vpr
+  # completions register; the snippet also defines the vp() wrapper.
+  zi wait'2' lucid ${ZI_LIGHT:+light-mode} \
+    id-as:'vite-plus' \
+    if:'[[ -r ~/.vite-plus/env ]]' \
+    is-snippet \
+    for ~/.vite-plus/env
 
   # KDE
   function {
