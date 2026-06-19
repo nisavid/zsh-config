@@ -30,6 +30,7 @@ function {
     ~/.cargo/bin
     ${GOBIN:-~/go/bin}
     $PNPM_HOME/bin
+    ~/.bun/bin
     ~/.vite-plus/bin
     $KDE_SRC/kdesrc-build
     ${KREW_ROOT:-$HOME/.krew}/bin
@@ -447,6 +448,7 @@ if (( $+functions[zi] )); then
       id-as:'localgen-completions' \
       atclone:'
         rm --recursive --force completions && mkdir completions
+        (( $+commands[bun] )) && [[ -r ~/.bun/_bun ]] && cp ~/.bun/_bun completions/_bun
         (( $+commands[cog] )) && cog generate-completions zsh >completions/_cog.zsh
         (( $+commands[openclaw] )) && openclaw completion --shell=zsh >completions/_openclaw.zsh
         (( $+commands[pip] )) && pip completion --zsh >completions/_pip.zsh
