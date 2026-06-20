@@ -1202,6 +1202,7 @@ alias jck='jc --dmesg'
 alias jckf='jck --follow'
 alias jcu='jc --user'
 alias jcu@='jc --user-unit'
+alias k=kubectl
 alias l=lsd
 alias la='l --almost-all'
 alias lal='la --long'
