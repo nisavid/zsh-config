@@ -25,7 +25,6 @@ export KDE_SRC=~/src/kde
 
 function {
   local path_prefix_dirs=(
-    $BIN_HOME
     $APPIMAGE_HOME
     ~/.cargo/bin
     ${GOBIN:-~/go/bin}
@@ -35,7 +34,6 @@ function {
     $KDE_SRC/kdesrc-build
     ${KREW_ROOT:-$HOME/.krew}/bin
     ~/.lmstudio/bin
-    /opt/homebrew/bin
   )
 
   integer i;
