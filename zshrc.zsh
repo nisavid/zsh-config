@@ -352,6 +352,16 @@ if (( $+functions[zi] )); then
     pick:'init.zsh' \
     for z-shell/0
 
+  function {
+    readonly script=~/.orbstack/shell/init.zsh
+    zi wait lucid ${ZI_LIGHT:+light-mode} \
+      id-as:'orbstack' \
+      if:"[[ -r $script ]]" \
+      as:'null' \
+      atload:"source '$script'" \
+      for z-shell/0
+  }
+
   ## ZI | LANGUAGES & TOOLKITS
 
   # Elm
