@@ -336,12 +336,15 @@ if (( $+functions[zi] )); then
       atload:"source '$script' askfirst noupdate" \
       for z-shell/0
   }
+
   function {
     readonly script=/opt/asdf-vm/asdf.sh
     zi wait lucid ${ZI_LIGHT:+light-mode} id-as:'asdf' if:"[[ -r $script ]]" pick:"$script" for z-shell/0
   }
+
   zi wait lucid is-snippet for \
     has:'systemctl' OMZP::systemd
+
   zi wait lucid ${ZI_LIGHT:+light-mode} \
     id-as:'manpath' \
     has:'manpath' \
