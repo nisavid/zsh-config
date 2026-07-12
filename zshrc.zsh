@@ -182,7 +182,7 @@ export GROFF_NO_SGR=1
 export MANROFFOPT='-c'
 export MANWIDTH=$COLUMNS
 
-export BROWSER=firefox
+#export BROWSER=firefox
 
 (( $+commands[nvim] )) && export EDITOR=nvim
 export SYSTEMD_EDITOR=$EDITOR
