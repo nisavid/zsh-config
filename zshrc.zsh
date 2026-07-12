@@ -289,7 +289,7 @@ if (( $+functions[zi] )); then
     #   for e.g. `ssh` completion, which triggers `find-the-command` and breaks
     #   the completion.  Not sure how to fix this properly.  For now, create
     #   this symlink as a workaround.
-    (( $+commands[ypcat] )) || ln --symbolic =false $BIN_HOME/ypcat
+    (( $+commands[ypcat] )) || ln -s =false $BIN_HOME/ypcat
     zi ${ZI_LIGHT:+light-mode} for @zsh-users+fast
     zi ${ZI_LIGHT:+light-mode} for @romkatv
   fi
@@ -306,7 +306,7 @@ if (( $+functions[zi] )); then
   zi ${ZI_LIGHT:+light-mode} \
     if:'(( $+functions[fast-theme] ))' \
     as:'null' \
-    atclone:'() { readonly destdir=${XDG_CONFIG_HOME:-~/.config}/f-sy-h; mkdir -p -- "$destdir" && cp --force themes/catppuccin-mocha.ini "$destdir/"; }' \
+    atclone:'() { readonly destdir=${XDG_CONFIG_HOME:-~/.config}/f-sy-h; mkdir -p "$destdir" && cp -f themes/catppuccin-mocha.ini "$destdir/"; }' \
     atpull:'%atclone' \
     atload:'fast-theme --quiet CONFIG:catppuccin-mocha' \
     for catppuccin/zsh-fsh
@@ -346,7 +346,7 @@ if (( $+functions[zi] )); then
     id-as:'manpath' \
     has:'manpath' \
     as:'null' \
-    atpull:'rm --force init.zsh' \
+    atpull:'rm -f init.zsh' \
     run-atpull \
     atload:'[[ -e init.zsh ]] || print -n -- export -aUT MANPATH manpath=\( ${(s<:>q-)"$(manpath)"} \) >init.zsh' \
     pick:'init.zsh' \
@@ -380,8 +380,8 @@ if (( $+functions[zi] )); then
       zi wait lucid ${ZI_LIGHT:+light-mode} \
         id-as:'kde-buildtools-completions' \
         atclone:"
-          rm --recursive --force completions
-          cp --archive ${(q-)compdir} completions
+          rm -rf completions
+          cp -a ${(q-)compdir} completions
           cp 0.plugin.zsh init.zsh
           print 'fpath[1,0]=( \${0:h}/completions )' >>init.zsh" \
         atpull:'%atclone' run-atpull \
@@ -395,7 +395,7 @@ if (( $+functions[zi] )); then
     id-as:'nvim-qt-runtime-path' \
     has:'nvim-qt' \
     as:'null' \
-    atpull:'rm --force init.zsh' \
+    atpull:'rm -f init.zsh' \
     run-atpull \
     atload:'[[ -e init.zsh ]] || print -n -- export NVIM_QT_RUNTIME_PATH=${(q-)${${(M)${(f)"$(nvim-qt --version)"}:#[[:blank:]]#runtime:[[:blank:]]##*}#[[:blank:]]#runtime:[[:blank:]]##}:P} >init.zsh' \
     pick:'init.zsh' \
@@ -445,7 +445,7 @@ if (( $+functions[zi] )); then
     zi wait lucid ${ZI_LIGHT:+light-mode} \
       id-as:'localgen-completions' \
       atclone:'
-        rm --recursive --force completions && mkdir completions
+        rm -rf completions && mkdir completions
         (( $+commands[bun] )) && [[ -r ~/.bun/_bun ]] && cp ~/.bun/_bun completions/_bun
         (( $+commands[cog] )) && cog generate-completions zsh >completions/_cog.zsh
         (( $+commands[openclaw] )) && openclaw completion --shell=zsh >completions/_openclaw.zsh
@@ -455,7 +455,7 @@ if (( $+functions[zi] )); then
         if (( $+commands[pnpm] )); then
           [[ -e ~/.zshrc ]] && cp --archive --force ~/.zshrc{,.zi-bak}
           pnpm install-completion zsh >/dev/null
-          if [[ -e ~/.zshrc.zi-bak ]]; then mv --force ~/.zshrc{.zi-bak,}; else rm --force ~/.zshrc; fi
+          if [[ -e ~/.zshrc.zi-bak ]]; then mv --force ~/.zshrc{.zi-bak,}; else rm -f ~/.zshrc; fi
         fi
         (( $+commands[rye] )) && rye self completion --shell=zsh >completions/_rye.zsh
         if (( $+commands[shtab] )); then
@@ -477,12 +477,12 @@ if (( $+functions[zi] )); then
   zi wait lucid ${ZI_LIGHT:+light-mode} \
     id-as:'localgen-zshrc' \
     atclone:'
-      rm --recursive --force scripts && mkdir scripts
+      rm -rf scripts && mkdir scripts
       if (( $+commands[gh] )) && gh copilot --version &>/dev/null; then
         {
           gh copilot -- alias -- zsh 2>/dev/null ||
             gh copilot alias -- zsh 2>/dev/null
-        } >scripts/gh-copilot-aliases.zsh || rm --force scripts/gh-copilot-aliases.zsh
+        } >scripts/gh-copilot-aliases.zsh || rm -f scripts/gh-copilot-aliases.zsh
       fi
       cp 0.plugin.zsh init.zsh'"
       print 'integer ret; for script in \${0:h}/scripts/*\(N); do source \$script; ret=\$\(( ret + ? )); done; \(( ! ret ))' >>init.zsh" \
@@ -1039,7 +1039,7 @@ function pprint-file {
     mimetype=$(file-mimetype $file)
     case $mimetype in
       (text/markdown)
-        [[ -d $tmpdir ]] || { tmpdir=$(mktempd) || return; trap 'rm --recursive --force -- $tmpdir' EXIT }
+        [[ -d $tmpdir ]] || { tmpdir=$(mktempd) || return; trap 'rm -rf $tmpdir' EXIT }
         tmpfile=$tmpdir/${file#/}
         mkdir -p -- $tmpfile:h
         { pty-readall command glow --style=$GLAMOUR_STYLE $file || command glow --style=$GLAMOUR_STYLE $file } | tr -d '\r' >! $tmpfile
@@ -1146,13 +1146,13 @@ function zsh-config-update {
   [[ -e $ZDOTDIR && ! -w $ZDOTDIR ]] && { print -r "error: not writable:" ${(q-)ZDOTDIR}; return }
 
   readonly tmp=$ZDOTDIR.$RANDOM || return
-  trap 'rm --recursive --force -- $tmp' EXIT
+  trap 'rm -rf $tmp' EXIT
   cp --archive -- $ZDOTDIR_ORIGIN $tmp || return
   if [[ -d $ZDOTDIR/zshrc.d ]]; then
     mkdir -p -- $tmp/zshrc.d || return
     cp --archive --update -- $ZDOTDIR/zshrc.d/* $tmp/zshrc.d/ || return
   fi
-  rm --recursive --force -- $ZDOTDIR || return
+  rm -rf $ZDOTDIR || return
   mv -- $tmp $ZDOTDIR || return
 }
 
