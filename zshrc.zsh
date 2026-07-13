@@ -36,7 +36,8 @@ function {
     ${GOBIN:-~/go/bin}
     $APPIMAGE_HOME
     /opt/podman/bin
-    /opt/homebrew/bin
+    $(brew --prefix rustup)/bin
+    $(brew --prefix)/bin
   )
 
   integer i;
