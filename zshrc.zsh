@@ -771,14 +771,6 @@ function compdefas { (( $+_comps[$1] )) && compdef $_comps[$1] ${^@[2,-1]}=$1 }
 #  }
 #fi
 
-if (( $+commands[gh] )); then
-  function {
-    local token
-    token=$(gh auth token 2>/dev/null) || return
-    export GITHUB_TOKEN=$token
-  }
-fi
-
 function caller-name {
   print -r -- ${${funcstack[3,-1]}[(r)^\(*\)]}
 }
