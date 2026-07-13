@@ -17,5 +17,3 @@ ZDOTDIR=${XDG_CONFIG_HOME:-~/.config}/zsh
 
 [[ -r ~/.local/bin/env ]] && source ~/.local/bin/env
 [[ -r ~/.vite-plus/env ]] && source ~/.vite-plus/env
-
-export FIRECRAWL_NO_TELEMETRY=1
