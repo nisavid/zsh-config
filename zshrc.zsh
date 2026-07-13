@@ -25,15 +25,18 @@ export KDE_SRC=~/src/kde
 
 function {
   local path_prefix_dirs=(
-    $APPIMAGE_HOME
-    ~/.cargo/bin
-    ${GOBIN:-~/go/bin}
-    $PNPM_HOME/bin
-    ~/.bun/bin
-    ~/.vite-plus/bin
+    ~/.lmstudio/bin
     $KDE_SRC/kdesrc-build
     ${KREW_ROOT:-$HOME/.krew}/bin
-    ~/.lmstudio/bin
+    ~/.orbstack/bin
+    ~/.vite-plus/bin
+    ~/.bun/bin
+    $PNPM_HOME/bin
+    ~/.cargo/bin
+    ${GOBIN:-~/go/bin}
+    $APPIMAGE_HOME
+    /opt/podman/bin
+    /opt/homebrew/bin
   )
 
   integer i;
@@ -596,13 +599,13 @@ if [[ "$TERM" == (Eterm*|alacritty*|aterm*|foot*|gnome*|konsole*|kterm*|putty*|r
   add-zsh-hook -Uz preexec xterm_title_preexec
 fi
 
-function workspace-update-path {
-  local newpaths=( ${(A):-(../)#package.json(N-.:h)} )
-  newpaths=( ${^newpaths}/node_modules/.bin(N-/) )
-  path=( $newpaths ${path:#*/node_modules/.bin} )
-}
-add-zsh-hook chpwd workspace-update-path
-workspace-update-path
+#function workspace-update-path {
+#  local newpaths=( ${(A):-(../)#package.json(N-.:h)} )
+#  newpaths=( ${^newpaths}/node_modules/.bin(N-/) )
+#  path=( $newpaths ${path:#*/node_modules/.bin} )
+#}
+#add-zsh-hook chpwd workspace-update-path
+#workspace-update-path
 
 zle -N bracketed-paste bracketed-paste-magic
 
