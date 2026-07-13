@@ -52,6 +52,10 @@ if (( $+commands[rgrc] )); then eval "$(rgrc --aliases)"
 elif [[ -r /etc/grc.zsh ]]; then source /etc/grc.zsh
 fi
 
+if (( $+commands[kubecolor] )); then
+  alias kubectl=kubecolor
+fi
+
 # TODO: move to lazy init
 [[ -s /opt/adguard-cli/bash-completion.sh ]] && source /opt/adguard-cli/bash-completion.sh
 [[ -r ~/.config/broot/launcher/bash/br ]] && source ~/.config/broot/launcher/bash/br
