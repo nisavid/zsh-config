@@ -277,15 +277,77 @@ typeset -A ZI=(
   CACHE_DIR ${XDG_CACHE_HOME:-~/.cache}/zi
 )
 ZI[BIN_DIR]=$ZI[HOME_DIR]/bin
+if [[ ! -r $ZI[BIN_DIR]/zi.zsh ]]; then
+  function {
+    emulate -L zsh
 
-[[ -r $ZI[BIN_DIR]/zi.zsh ]] && source $ZI[BIN_DIR]/zi.zsh
+    if (( ! $+commands[git] )); then
+      print -ru2 -- "Unable to install Zi: git is not available in PATH."
+      return 1
+    fi
+
+    if ! command mkdir -p -- "$ZI[HOME_DIR]"; then
+      print -ru2 -- "Unable to install Zi: cannot create ${(q-)ZI[HOME_DIR]}."
+      return 1
+    fi
+
+    local install_dir
+    install_dir=$(command mktemp -d "$ZI[HOME_DIR]/install.XXXXXX") || {
+      print -ru2 -- "Unable to install Zi: cannot create a temporary directory in ${(q-)ZI[HOME_DIR]}."
+      return 1
+    }
+
+    {
+      print -ru2 -- "Zi is missing; installing it in ${(q-)ZI[BIN_DIR]}."
+      command git clone --depth=1 --branch=main https://github.com/z-shell/zi.git "$install_dir/bin" || {
+        print -ru2 -- "Unable to install Zi: git clone failed."
+        return 1
+      }
+      if [[ ! -r $install_dir/bin/zi.zsh ]]; then
+        print -ru2 -- "Unable to install Zi: the downloaded repository does not contain zi.zsh."
+        return 1
+      fi
+
+      if [[ -e $ZI[BIN_DIR] || -h $ZI[BIN_DIR] ]] \
+        && ! command mv -- "$ZI[BIN_DIR]" "$install_dir/incomplete-bin"; then
+        print -ru2 -- "Unable to install Zi: cannot replace the incomplete installation at ${(q-)ZI[BIN_DIR]}."
+        return 1
+      fi
+      if ! command mv -- "$install_dir/bin" "$ZI[BIN_DIR]"; then
+        [[ -e $install_dir/incomplete-bin || -h $install_dir/incomplete-bin ]] \
+          && command mv -- "$install_dir/incomplete-bin" "$ZI[BIN_DIR]"
+        print -ru2 -- "Unable to install Zi: cannot activate the downloaded repository."
+        return 1
+      fi
+    } always {
+      command rm -rf -- "$install_dir"
+    }
+  }
+fi
+
+if [[ -r $ZI[BIN_DIR]/zi.zsh ]]; then
+  source $ZI[BIN_DIR]/zi.zsh \
+    || print -ru2 -- "Zi is installed but failed to load from ${(q-)ZI[BIN_DIR]/zi.zsh}."
+else
+  print -ru2 -- "Zi is unavailable; shell plugins and the configured prompt will not be loaded."
+fi
 unset MANPATH
 
 ZI_LIGHT=1
 if (( $+functions[zi] )); then
   ## ZI | ZSH
-
-  zi wait:'1' pack atload=+'zicompinit_fast; zicdreplay' for system-completions
+  function {
+    local -a system_completions=( /usr/share/zsh/functions/Completion/*/_*(N.) )
+    if (( #system_completions )); then
+      zi wait:'1' pack atload=+'zicompinit_fast; zicdreplay' for system-completions
+    else
+      zi wait:'1' lucid \
+        id-as:'completion-init' \
+        as:'null' \
+        atload:'zicompinit_fast; zicdreplay' \
+        for z-shell/0
+    fi
+  }
   if (( WARP_COMPAT )); then
     # With the syntax highlighting (original or fast) or autosuggestion plugins, Warp renders the prompt decorations af
     zi ${ZI_LIGHT:+light-mode} for zsh-users/zsh-completions
