@@ -547,7 +547,12 @@ setopt combining_chars
 
 CORRECT_IGNORE_FILE='.*'
 HISTORY_IGNORE='(? *|bg(| *)|bye|dirs(| *)|disown *|exit|fg(| *)|hash(| *)|history|job *|jobs(| *)|kill *|logout|popd(| *)|pushd(| *)|pwd|r|rehash|unhash *|wait(| *)|whence *|which *)'
-HISTFILE=${XDG_STATE_HOME:-~/.local/state}/zsh/history
+case $OSTYPE in
+  darwin*) ZSH_STATE_HOME=~/Library/Application\ Support/zsh ;;
+  *) ZSH_STATE_HOME=${XDG_STATE_HOME:-~/.local/state}/zsh ;;
+esac
+[[ -d $ZSH_STATE_HOME ]] || mkdir -p -- "$ZSH_STATE_HOME"
+HISTFILE=$ZSH_STATE_HOME/history
 HISTSIZE=101000000
 KEYTIMEOUT=1 # centiseconds
 SAVEHIST=100000000
