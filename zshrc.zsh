@@ -864,7 +864,14 @@ function env-system {
     zsh --no-rcs -c "${(j<;>)cmds}"
 }
 
-typeset -A ext_mimetype
+typeset -A ext_mimetype=(
+  md text/markdown
+  markdown text/markdown
+  mdown text/markdown
+  markdn text/markdown
+  mkd text/markdown
+)
+
 function {
   readonly -a files=( /etc/mime.types ~/.mime.types )
   local -a readable_files=( ${^files}(N-.) )
@@ -1113,7 +1120,7 @@ function pprint-file {
     shift
   done
 
-  local -a out_files
+  local -a out_files bat_opts=( --paging=always --decorations=always --color=always )
   local file mimetype tmpdir tmpfile
   for file in $files; do
     mimetype=$(file-mimetype $file)
@@ -1124,12 +1131,15 @@ function pprint-file {
         mkdir -p -- $tmpfile:h
         { pty-readall command glow --style=$GLAMOUR_STYLE $file || command glow --style=$GLAMOUR_STYLE $file } | tr -d '\r' >! $tmpfile
         out_files+=( $tmpfile )
+        if (( $#files == 1 )); then
+          bat_opts+=( --file-name=$file --language=txt )
+        fi
         ;;
       (*) out_files+=( $file )
     esac
   done
 
-  $PAGER $opts -- ${(q-)out_files}
+  command bat $bat_opts $opts -- ${(q-)out_files}
 }
 
 function pprint-zfunc { functions -x2 -- "$@" | bat --language=zsh }
