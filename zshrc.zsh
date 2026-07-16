@@ -1120,7 +1120,7 @@ function pprint-file {
     shift
   done
 
-  local -a out_files bat_opts=( --paging=always --decorations=always --color=always )
+  local -a out_files bat_opts=( --decorations=always --color=always )
   local file mimetype tmpdir tmpfile
   for file in $files; do
     mimetype=$(file-mimetype $file)
