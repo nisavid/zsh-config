@@ -22,3 +22,7 @@ local plain=${output//$'\e'\[[0-9;]##m/}
 [[ $plain != *'**PF_GLOW_STRONG_PROBE**'* ]]
 [[ $plain == *'─────'* ]]
 [[ $plain == *'File:'* ]]
+
+local paging_output
+paging_output=$(zsh -lic "BAT_PAGING=never BAT_PAGER='sed s/^/PF_PAGER_USED:/' pf ${(q)fixture}" 2>/dev/null)
+[[ $paging_output != *'PF_PAGER_USED:'* ]]
