@@ -57,8 +57,6 @@ if (( $+commands[kubecolor] )); then
   alias kubectl=kubecolor
 fi
 
-# TODO: move to lazy init
-[[ -s /opt/adguard-cli/bash-completion.sh ]] && source /opt/adguard-cli/bash-completion.sh
 [[ -r ~/.config/broot/launcher/bash/br ]] && source ~/.config/broot/launcher/bash/br
 
 : ${WARP_COMPAT:-0}
@@ -348,6 +346,12 @@ if (( $+functions[zi] )); then
         for z-shell/0
     fi
   }
+  zi wait:'2' lucid ${ZI_LIGHT:+light-mode} \
+    id-as:'adguard-completion' \
+    if:'[[ -s /opt/adguard-cli/bash-completion.sh ]]' \
+    as:'null' \
+    atload:'autoload -Uz bashcompinit; bashcompinit; source /opt/adguard-cli/bash-completion.sh' \
+    for z-shell/0
   if (( WARP_COMPAT )); then
     # With the syntax highlighting (original or fast) or autosuggestion plugins, Warp renders the prompt decorations af
     zi ${ZI_LIGHT:+light-mode} for zsh-users/zsh-completions
@@ -575,6 +579,11 @@ if (( $+functions[zi] )); then
 else
   autoload -Uz compinit
   compinit
+  if [[ -s /opt/adguard-cli/bash-completion.sh ]]; then
+    autoload -Uz bashcompinit
+    bashcompinit
+    source /opt/adguard-cli/bash-completion.sh
+  fi
 fi
 
 
