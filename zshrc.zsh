@@ -445,12 +445,13 @@ if (( $+functions[zi] )); then
   zi wait lucid ${ZI_LIGHT:+light-mode} atload:'elm-completion-update 2>/dev/null' for kraklin/elm.plugin.zsh
 
   # Node (fnm)
-  #zi wait lucid ${ZI_LIGHT:+light-mode} \
-  #  id-as:'fnm' \
-  #  has:'fnm' \
-  #  as:'null' \
-  #  atload:'eval "$(fnm env --shell zsh --use-on-cd)"' \
-  #  for z-shell/0
+  zi wait lucid ${ZI_LIGHT:+light-mode} \
+    id-as:'fnm' \
+    if:'[[ ! -r ~/.vite-plus/env ]]' \
+    has:'fnm' \
+    as:'null' \
+    atload:'eval "$(fnm env --shell zsh --use-on-cd)"' \
+    for z-shell/0
 
   # Vite+ — wait'2' so it loads after compinit (wait'1') and its vp/vpr
   # completions register; the snippet also defines the vp() wrapper.
