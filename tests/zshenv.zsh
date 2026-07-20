@@ -139,9 +139,24 @@ function test_pre_enabled_xtrace_hides_values {
     "TRACE_VALUE=$canary" \
     "TRACE_COMPOSED=prefix-\${TRACE_VALUE}"
 
-  env -i HOME=$root/home PATH=/usr/bin:/bin EXPECTED_CANARY=$canary "$zsh_path" -x -c \
-    'print -r -- TRACE_RESTORED_MARKER >/dev/null; set +x; [[ $TRACE_VALUE == $EXPECTED_CANARY && $TRACE_COMPOSED == "prefix-$EXPECTED_CANARY" && $ZDOTDIR == $HOME/.config/zsh ]]' \
-    2>$trace_log || { fail 'traced startup must still load valid definitions'; return 1 }
+  local trace_status
+  if env -i HOME=$root/home PATH=/usr/bin:/bin EXPECTED_CANARY=$canary "$zsh_path" -x -c \
+    'print -r -- TRACE_RESTORED_MARKER >/dev/null; set +x
+     [[ $TRACE_VALUE == $EXPECTED_CANARY ]] || exit 11
+     [[ $TRACE_COMPOSED == "prefix-$EXPECTED_CANARY" ]] || exit 12
+     [[ $ZDOTDIR == $HOME/.config/zsh ]] || exit 13' \
+    2>$trace_log; then
+    trace_status=0
+  else
+    trace_status=$?
+  fi
+  case $trace_status in
+    0) ;;
+    11) fail 'TRACE_VALUE was not populated from environment.d'; return 1 ;;
+    12) fail 'TRACE_COMPOSED was not expanded from a prior assignment'; return 1 ;;
+    13) fail 'ZDOTDIR was not set as expected'; return 1 ;;
+    *) fail 'traced startup failed before validating definitions'; return 1 ;;
+  esac
 
   grep -Fq TRACE_RESTORED_MARKER $trace_log ||
     { fail 'the loader must restore caller tracing after startup'; return 1 }
@@ -172,6 +187,49 @@ function test_readonly_assignment_isolated {
     { fail 'read-only assignment must emit one rejection diagnostic'; return 1 }
 }
 
+function test_parameter_expansion_ignores_loader_scratch_state {
+  emulate -L zsh
+  setopt nounset
+
+  local root=$tmpdir/dynamic-scope
+  mkdir -p -- $root/home
+  write_lines $root/environment.d/00-collision.conf \
+    'EXPANDED_SCRATCH_NAME=$output'
+
+  local HOME=$root/home XDG_CONFIG_HOME=$root PATH=/usr/bin:/bin
+  typeset -g output=managed-public-value
+  source $loader
+
+  [[ $EXPANDED_SCRATCH_NAME == managed-public-value ]] ||
+    { fail 'parameter expansion observed loader scratch state'; return 1 }
+  unset output
+}
+
+function test_non_scalar_assignment_is_rejected_without_evaluation {
+  emulate -L zsh
+  setopt nounset
+
+  local root=$tmpdir/non-scalar
+  local parse_log=$root/parse.log
+  local sentinel=$root/evaluated
+  mkdir -p -- $root/home
+  write_lines $root/environment.d/00-non-scalar.conf \
+    'TYPED_TARGET=$MALICIOUS_TYPED_VALUE' \
+    'AFTER_TYPED_TARGET=loaded'
+
+  local HOME=$root/home XDG_CONFIG_HOME=$root PATH=/usr/bin:/bin
+  typeset -gi TYPED_TARGET=0
+  typeset -g MALICIOUS_TYPED_VALUE="1+\$(touch ${(q)sentinel})"
+  source $loader 2>$parse_log
+
+  [[ ! -e $sentinel ]] || { fail 'typed assignment evaluated managed text'; return 1 }
+  (( TYPED_TARGET == 0 )) || { fail 'typed parameter was replaced'; return 1 }
+  [[ $AFTER_TYPED_TARGET == loaded ]] || { fail 'typed rejection stopped later assignments'; return 1 }
+  (( $(grep -Fc 'cannot replace a non-scalar parameter' $parse_log) == 1 )) ||
+    { fail 'typed assignment must emit one rejection diagnostic'; return 1 }
+  unset TYPED_TARGET MALICIOUS_TYPED_VALUE
+}
+
 function test_existing_helpers_are_preserved {
   emulate -L zsh
   setopt nounset
@@ -200,5 +258,7 @@ test_public_expansion_and_order || failed=1
 test_executable_and_malformed_syntax_is_rejected || failed=1
 test_pre_enabled_xtrace_hides_values || failed=1
 test_readonly_assignment_isolated || failed=1
+test_parameter_expansion_ignores_loader_scratch_state || failed=1
+test_non_scalar_assignment_is_rejected_without_evaluation || failed=1
 test_existing_helpers_are_preserved || failed=1
 exit $failed

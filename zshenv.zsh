@@ -7,137 +7,140 @@
   emulate -L zsh
   unsetopt xtrace verbose
   setopt extendedglob
-  local fast_value_pattern='[-A-Za-z0-9_./,:+=%@${}]#'
-  local saved_reject_definition=${functions[__zshenv_reject_definition]-}
-  local saved_expand_value=${functions[__zshenv_expand_value]-}
-  integer had_reject_definition=${+functions[__zshenv_reject_definition]}
-  integer had_expand_value=${+functions[__zshenv_expand_value]}
+  local __zshenv_fast_value_pattern='[-A-Za-z0-9_./,:+=%@${}]#'
+  local __zshenv_saved_reject_definition=${functions[__zshenv_reject_definition]-}
+  local __zshenv_saved_expand_value=${functions[__zshenv_expand_value]-}
+  integer __zshenv_had_reject_definition=${+functions[__zshenv_reject_definition]}
+  integer __zshenv_had_expand_value=${+functions[__zshenv_expand_value]}
 
   function __zshenv_reject_definition {
     print -ru2 -- "zshenv: ignored ${1}:${2}: ${3}"
   }
 
   function __zshenv_expand_value {
-    local input=$1 output= char quote=none next=
-    local body name operator fallback current parameter_type scan_quote suffix
-    local remaining prefix
-    integer i=1 j length=${#input} depth parameter_set
+    local __zshenv_input=$1 __zshenv_output= __zshenv_char __zshenv_quote=none
+    local __zshenv_next= __zshenv_body __zshenv_name __zshenv_operator
+    local __zshenv_fallback __zshenv_current __zshenv_parameter_type
+    local __zshenv_scan_quote __zshenv_suffix
+    local __zshenv_remaining __zshenv_prefix
+    integer __zshenv_i=1 __zshenv_j __zshenv_length=${#__zshenv_input}
+    integer __zshenv_depth __zshenv_parameter_set
 
     # The managed public files overwhelmingly use unquoted path-like values.
     # Handle that strict subset without scanning every character, while the
     # full parser below owns quoted and escaped values.
-    if [[ $input == ${~fast_value_pattern} ]]; then
-      remaining=$input
-      while [[ $remaining == *'$'* ]]; do
-        prefix=${remaining%%\$*}
-        [[ $prefix != *'{'* && $prefix != *'}'* ]] || return 1
-        output+=$prefix
-        remaining=$remaining[$(( ${#prefix} + 2 )),-1]
-        [[ -n $remaining ]] || return 1
-        body= name= operator= fallback=
+    if [[ $__zshenv_input == ${~__zshenv_fast_value_pattern} ]]; then
+      __zshenv_remaining=$__zshenv_input
+      while [[ $__zshenv_remaining == *'$'* ]]; do
+        __zshenv_prefix=${__zshenv_remaining%%\$*}
+        [[ $__zshenv_prefix != *'{'* && $__zshenv_prefix != *'}'* ]] || return 1
+        __zshenv_output+=$__zshenv_prefix
+        __zshenv_remaining=$__zshenv_remaining[$(( ${#__zshenv_prefix} + 2 )),-1]
+        [[ -n $__zshenv_remaining ]] || return 1
+        __zshenv_body= __zshenv_name= __zshenv_operator= __zshenv_fallback=
 
-        if [[ $remaining[1] == '{' ]]; then
-          length=${#remaining}
-          j=2
-          depth=1
-          while (( j <= length )); do
-            char=$remaining[$j]
-            if [[ $char == '$' && $remaining[$(( j + 1 ))] == '{' ]]; then
-              (( depth++ ))
-              (( j++ ))
-            elif [[ $char == '}' ]]; then
-              (( depth-- ))
-              (( depth == 0 )) && break
+        if [[ $__zshenv_remaining[1] == '{' ]]; then
+          __zshenv_length=${#__zshenv_remaining}
+          __zshenv_j=2
+          __zshenv_depth=1
+          while (( __zshenv_j <= __zshenv_length )); do
+            __zshenv_char=$__zshenv_remaining[$__zshenv_j]
+            if [[ $__zshenv_char == '$' && $__zshenv_remaining[$(( __zshenv_j + 1 ))] == '{' ]]; then
+              (( __zshenv_depth++ ))
+              (( __zshenv_j++ ))
+            elif [[ $__zshenv_char == '}' ]]; then
+              (( __zshenv_depth-- ))
+              (( __zshenv_depth == 0 )) && break
             fi
-            (( j++ ))
+            (( __zshenv_j++ ))
           done
-          (( depth == 0 )) || return 1
-          body=$remaining[2,$(( j - 1 ))]
-          remaining=$remaining[$(( j + 1 )),-1]
+          (( __zshenv_depth == 0 )) || return 1
+          __zshenv_body=$__zshenv_remaining[2,$(( __zshenv_j - 1 ))]
+          __zshenv_remaining=$__zshenv_remaining[$(( __zshenv_j + 1 )),-1]
 
-          name=${body%%[^A-Za-z0-9_]*}
-          [[ $name == [A-Za-z_][A-Za-z0-9_]# ]] || return 1
-          suffix=$body[$(( ${#name} + 1 )),-1]
-          if [[ $suffix == ':-'* ]]; then
-            operator=:-
-            fallback=$suffix[3,-1]
-            __zshenv_expand_value $fallback || return 1
-            fallback=$REPLY
-          elif [[ $suffix == '-'* ]]; then
-            operator=-
-            fallback=$suffix[2,-1]
-            __zshenv_expand_value $fallback || return 1
-            fallback=$REPLY
-          elif [[ -n $suffix ]]; then
+          __zshenv_name=${__zshenv_body%%[^A-Za-z0-9_]*}
+          [[ $__zshenv_name == [A-Za-z_][A-Za-z0-9_]# ]] || return 1
+          __zshenv_suffix=$__zshenv_body[$(( ${#__zshenv_name} + 1 )),-1]
+          if [[ $__zshenv_suffix == ':-'* ]]; then
+            __zshenv_operator=:-
+            __zshenv_fallback=$__zshenv_suffix[3,-1]
+            __zshenv_expand_value $__zshenv_fallback || return 1
+            __zshenv_fallback=$__zshenv_REPLY
+          elif [[ $__zshenv_suffix == '-'* ]]; then
+            __zshenv_operator=-
+            __zshenv_fallback=$__zshenv_suffix[2,-1]
+            __zshenv_expand_value $__zshenv_fallback || return 1
+            __zshenv_fallback=$__zshenv_REPLY
+          elif [[ -n $__zshenv_suffix ]]; then
             return 1
           fi
         else
-          [[ $remaining[1] == [A-Za-z_] ]] || return 1
-          name=${remaining%%[^A-Za-z0-9_]*}
-          remaining=$remaining[$(( ${#name} + 1 )),-1]
+          [[ $__zshenv_remaining[1] == [A-Za-z_] ]] || return 1
+          __zshenv_name=${__zshenv_remaining%%[^A-Za-z0-9_]*}
+          __zshenv_remaining=$__zshenv_remaining[$(( ${#__zshenv_name} + 1 )),-1]
         fi
 
-        parameter_set=${+parameters[$name]}
-        current=
-        if (( parameter_set )); then
-          parameter_type=${parameters[$name]}
-          [[ $parameter_type != *array* && $parameter_type != *association* ]] || return 1
-          current=${(P)name}
+        __zshenv_parameter_set=${+parameters[$__zshenv_name]}
+        __zshenv_current=
+        if (( __zshenv_parameter_set )); then
+          __zshenv_parameter_type=${parameters[$__zshenv_name]}
+          [[ $__zshenv_parameter_type != *array* && $__zshenv_parameter_type != *association* ]] || return 1
+          __zshenv_current=${(P)__zshenv_name}
         fi
 
-        if [[ $operator == ':-' ]] && (( ! parameter_set || ! ${#current} )); then
-          output+=$fallback
-        elif [[ $operator == '-' ]] && (( ! parameter_set )); then
-          output+=$fallback
+        if [[ $__zshenv_operator == ':-' ]] && (( ! __zshenv_parameter_set || ! ${#__zshenv_current} )); then
+          __zshenv_output+=$__zshenv_fallback
+        elif [[ $__zshenv_operator == '-' ]] && (( ! __zshenv_parameter_set )); then
+          __zshenv_output+=$__zshenv_fallback
         else
-          output+=$current
+          __zshenv_output+=$__zshenv_current
         fi
       done
-      [[ $remaining != *'{'* && $remaining != *'}'* ]] || return 1
-      REPLY=$output$remaining
+      [[ $__zshenv_remaining != *'{'* && $__zshenv_remaining != *'}'* ]] || return 1
+      __zshenv_REPLY=$__zshenv_output$__zshenv_remaining
       return 0
     fi
 
-    while (( i <= length )); do
-      char=$input[$i]
+    while (( __zshenv_i <= __zshenv_length )); do
+      __zshenv_char=$__zshenv_input[$__zshenv_i]
 
-      if [[ $quote == single ]]; then
-        if [[ $char == "'" ]]; then
-          quote=none
+      if [[ $__zshenv_quote == single ]]; then
+        if [[ $__zshenv_char == "'" ]]; then
+          __zshenv_quote=none
         else
-          output+=$char
+          __zshenv_output+=$__zshenv_char
         fi
-        (( i++ ))
+        (( __zshenv_i++ ))
         continue
       fi
 
-      if [[ $quote == double ]]; then
-        if [[ $char == '"' ]]; then
-          quote=none
-          (( i++ ))
+      if [[ $__zshenv_quote == double ]]; then
+        if [[ $__zshenv_char == '"' ]]; then
+          __zshenv_quote=none
+          (( __zshenv_i++ ))
           continue
         fi
-        if [[ $char == \\ ]]; then
-          (( i < length )) || return 1
-          next=$input[$(( i + 1 ))]
-          if [[ $next == '$' || $next == '`' || $next == '"' || $next == \\ ]]; then
-            output+=$next
-            (( i += 2 ))
+        if [[ $__zshenv_char == \\ ]]; then
+          (( __zshenv_i < __zshenv_length )) || return 1
+          __zshenv_next=$__zshenv_input[$(( __zshenv_i + 1 ))]
+          if [[ $__zshenv_next == '$' || $__zshenv_next == '`' || $__zshenv_next == '"' || $__zshenv_next == \\ ]]; then
+            __zshenv_output+=$__zshenv_next
+            (( __zshenv_i += 2 ))
           else
-            output+=$'\\'
-            (( i++ ))
+            __zshenv_output+=$'\\'
+            (( __zshenv_i++ ))
           fi
           continue
         fi
-        [[ $char != '`' ]] || return 1
+        [[ $__zshenv_char != '`' ]] || return 1
       else
-        case $char in
-          "'") quote=single; (( i++ )); continue ;;
-          '"') quote=double; (( i++ )); continue ;;
+        case $__zshenv_char in
+          "'") __zshenv_quote=single; (( __zshenv_i++ )); continue ;;
+          '"') __zshenv_quote=double; (( __zshenv_i++ )); continue ;;
           \\)
-            (( i < length )) || return 1
-            output+=$input[$(( i + 1 ))]
-            (( i += 2 ))
+            (( __zshenv_i < __zshenv_length )) || return 1
+            __zshenv_output+=$__zshenv_input[$(( __zshenv_i + 1 ))]
+            (( __zshenv_i += 2 ))
             continue
             ;;
           [[:space:]]|'`'|';'|'|'|'&'|'<'|'>'|'('|')'|'{'|'}'|'['|']'|'*'|'?'|'~')
@@ -146,141 +149,146 @@
         esac
       fi
 
-      if [[ $char != '$' ]]; then
-        output+=$char
-        (( i++ ))
+      if [[ $__zshenv_char != '$' ]]; then
+        __zshenv_output+=$__zshenv_char
+        (( __zshenv_i++ ))
         continue
       fi
 
-      (( i < length )) || return 1
-      next=$input[$(( i + 1 ))]
-      body= name= operator= fallback=
+      (( __zshenv_i < __zshenv_length )) || return 1
+      __zshenv_next=$__zshenv_input[$(( __zshenv_i + 1 ))]
+      __zshenv_body= __zshenv_name= __zshenv_operator= __zshenv_fallback=
 
-      if [[ $next == '{' ]]; then
-        j=$(( i + 2 ))
-        depth=1
-        scan_quote=none
-        while (( j <= length )); do
-          char=$input[$j]
-          if [[ $scan_quote == single ]]; then
-            [[ $char == "'" ]] && scan_quote=none
-          elif [[ $scan_quote == double ]]; then
-            if [[ $char == \\ ]]; then
-              (( j++ ))
-            elif [[ $char == '"' ]]; then
-              scan_quote=none
-            elif [[ $char == '$' && $input[$(( j + 1 ))] == '{' ]]; then
-              (( depth++ ))
-              (( j++ ))
-            elif [[ $char == '}' && depth -gt 1 ]]; then
-              (( depth-- ))
+      if [[ $__zshenv_next == '{' ]]; then
+        __zshenv_j=$(( __zshenv_i + 2 ))
+        __zshenv_depth=1
+        __zshenv_scan_quote=none
+        while (( __zshenv_j <= __zshenv_length )); do
+          __zshenv_char=$__zshenv_input[$__zshenv_j]
+          if [[ $__zshenv_scan_quote == single ]]; then
+            [[ $__zshenv_char == "'" ]] && __zshenv_scan_quote=none
+          elif [[ $__zshenv_scan_quote == double ]]; then
+            if [[ $__zshenv_char == \\ ]]; then
+              (( __zshenv_j++ ))
+            elif [[ $__zshenv_char == '"' ]]; then
+              __zshenv_scan_quote=none
+            elif [[ $__zshenv_char == '$' && $__zshenv_input[$(( __zshenv_j + 1 ))] == '{' ]]; then
+              (( __zshenv_depth++ ))
+              (( __zshenv_j++ ))
+            elif [[ $__zshenv_char == '}' && __zshenv_depth -gt 1 ]]; then
+              (( __zshenv_depth-- ))
             fi
           else
-            if [[ $char == "'" ]]; then
-              scan_quote=single
-            elif [[ $char == '"' ]]; then
-              scan_quote=double
-            elif [[ $char == \\ ]]; then
-              (( j++ ))
-            elif [[ $char == '$' && $input[$(( j + 1 ))] == '{' ]]; then
-              (( depth++ ))
-              (( j++ ))
-            elif [[ $char == '}' ]]; then
-              (( depth-- ))
-              (( depth == 0 )) && break
+            if [[ $__zshenv_char == "'" ]]; then
+              __zshenv_scan_quote=single
+            elif [[ $__zshenv_char == '"' ]]; then
+              __zshenv_scan_quote=double
+            elif [[ $__zshenv_char == \\ ]]; then
+              (( __zshenv_j++ ))
+            elif [[ $__zshenv_char == '$' && $__zshenv_input[$(( __zshenv_j + 1 ))] == '{' ]]; then
+              (( __zshenv_depth++ ))
+              (( __zshenv_j++ ))
+            elif [[ $__zshenv_char == '}' ]]; then
+              (( __zshenv_depth-- ))
+              (( __zshenv_depth == 0 )) && break
             fi
           fi
-          (( j++ ))
+          (( __zshenv_j++ ))
         done
-        (( depth == 0 )) || return 1
-        body=$input[$(( i + 2 )),$(( j - 1 ))]
+        (( __zshenv_depth == 0 )) || return 1
+        __zshenv_body=$__zshenv_input[$(( __zshenv_i + 2 )),$(( __zshenv_j - 1 ))]
 
-        name=${body%%[^A-Za-z0-9_]*}
-        [[ $name == [A-Za-z_][A-Za-z0-9_]# ]] || return 1
-        suffix=$body[$(( ${#name} + 1 )),-1]
-        if [[ $suffix == ':-'* ]]; then
-          operator=:-
-          fallback=$suffix[3,-1]
-          __zshenv_expand_value $fallback || return 1
-          fallback=$REPLY
-        elif [[ $suffix == '-'* ]]; then
-          operator=-
-          fallback=$suffix[2,-1]
-          __zshenv_expand_value $fallback || return 1
-          fallback=$REPLY
-        elif [[ -n $suffix ]]; then
+        __zshenv_name=${__zshenv_body%%[^A-Za-z0-9_]*}
+        [[ $__zshenv_name == [A-Za-z_][A-Za-z0-9_]# ]] || return 1
+        __zshenv_suffix=$__zshenv_body[$(( ${#__zshenv_name} + 1 )),-1]
+        if [[ $__zshenv_suffix == ':-'* ]]; then
+          __zshenv_operator=:-
+          __zshenv_fallback=$__zshenv_suffix[3,-1]
+          __zshenv_expand_value $__zshenv_fallback || return 1
+          __zshenv_fallback=$__zshenv_REPLY
+        elif [[ $__zshenv_suffix == '-'* ]]; then
+          __zshenv_operator=-
+          __zshenv_fallback=$__zshenv_suffix[2,-1]
+          __zshenv_expand_value $__zshenv_fallback || return 1
+          __zshenv_fallback=$__zshenv_REPLY
+        elif [[ -n $__zshenv_suffix ]]; then
           return 1
         fi
-        i=$(( j + 1 ))
-      elif [[ $next == [A-Za-z_] ]]; then
-        j=$(( i + 1 ))
-        while (( j <= length )) && [[ $input[$j] == [A-Za-z0-9_] ]]; do
-          (( j++ ))
+        __zshenv_i=$(( __zshenv_j + 1 ))
+      elif [[ $__zshenv_next == [A-Za-z_] ]]; then
+        __zshenv_j=$(( __zshenv_i + 1 ))
+        while (( __zshenv_j <= __zshenv_length )) && [[ $__zshenv_input[$__zshenv_j] == [A-Za-z0-9_] ]]; do
+          (( __zshenv_j++ ))
         done
-        name=$input[$(( i + 1 )),$(( j - 1 ))]
-        i=$j
+        __zshenv_name=$__zshenv_input[$(( __zshenv_i + 1 )),$(( __zshenv_j - 1 ))]
+        __zshenv_i=$__zshenv_j
       else
         return 1
       fi
 
-      parameter_set=${+parameters[$name]}
-      current=
-      if (( parameter_set )); then
-        parameter_type=${parameters[$name]}
-        [[ $parameter_type != *array* && $parameter_type != *association* ]] || return 1
-        current=${(P)name}
+      __zshenv_parameter_set=${+parameters[$__zshenv_name]}
+      __zshenv_current=
+      if (( __zshenv_parameter_set )); then
+        __zshenv_parameter_type=${parameters[$__zshenv_name]}
+        [[ $__zshenv_parameter_type != *array* && $__zshenv_parameter_type != *association* ]] || return 1
+        __zshenv_current=${(P)__zshenv_name}
       fi
 
-      if [[ $operator == ':-' ]] && (( ! parameter_set || ! ${#current} )); then
-        output+=$fallback
-      elif [[ $operator == '-' ]] && (( ! parameter_set )); then
-        output+=$fallback
+      if [[ $__zshenv_operator == ':-' ]] && (( ! __zshenv_parameter_set || ! ${#__zshenv_current} )); then
+        __zshenv_output+=$__zshenv_fallback
+      elif [[ $__zshenv_operator == '-' ]] && (( ! __zshenv_parameter_set )); then
+        __zshenv_output+=$__zshenv_fallback
       else
-        output+=$current
+        __zshenv_output+=$__zshenv_current
       fi
     done
 
-    [[ $quote == none ]] || return 1
-    REPLY=$output
+    [[ $__zshenv_quote == none ]] || return 1
+    __zshenv_REPLY=$__zshenv_output
   }
 
-  local file definition name raw_value parameter_type REPLY
-  integer line_number
-  for file in ${XDG_CONFIG_HOME:-~/.config}/environment.d/*(N-.r); do
-    line_number=0
-    while IFS= read -r definition || [[ -n $definition ]]; do
-      (( line_number++ ))
-      [[ $definition == *$'\r' ]] && definition=${definition%$'\r'}
-      [[ -z $definition || $definition == '#'* ]] && continue
+  local __zshenv_file __zshenv_definition __zshenv_name __zshenv_raw_value
+  local __zshenv_parameter_type __zshenv_REPLY
+  integer __zshenv_line_number
+  for __zshenv_file in ${XDG_CONFIG_HOME:-~/.config}/environment.d/*(N-.r); do
+    __zshenv_line_number=0
+    while IFS= read -r __zshenv_definition || [[ -n $__zshenv_definition ]]; do
+      (( __zshenv_line_number++ ))
+      [[ $__zshenv_definition == *$'\r' ]] && __zshenv_definition=${__zshenv_definition%$'\r'}
+      [[ -z $__zshenv_definition || $__zshenv_definition == '#'* ]] && continue
 
-      if [[ $definition != [A-Za-z_][A-Za-z0-9_]#=* ]]; then
-        __zshenv_reject_definition $file $line_number 'expected NAME=VALUE assignment'
+      if [[ $__zshenv_definition != [A-Za-z_][A-Za-z0-9_]#=* ]]; then
+        __zshenv_reject_definition $__zshenv_file $__zshenv_line_number 'expected NAME=VALUE assignment'
         continue
       fi
-      name=${definition%%=*}
-      raw_value=${definition#*=}
-      if ! __zshenv_expand_value $raw_value; then
-        __zshenv_reject_definition $file $line_number 'unsupported or malformed value syntax'
+      __zshenv_name=${__zshenv_definition%%=*}
+      __zshenv_raw_value=${__zshenv_definition#*=}
+      if ! __zshenv_expand_value $__zshenv_raw_value; then
+        __zshenv_reject_definition $__zshenv_file $__zshenv_line_number 'unsupported or malformed value syntax'
         continue
       fi
-      parameter_type=${parameters[$name]-}
-      if [[ $parameter_type == *readonly* ]]; then
-        __zshenv_reject_definition $file $line_number 'cannot replace a read-only parameter'
+      __zshenv_parameter_type=${parameters[$__zshenv_name]-}
+      if [[ $__zshenv_parameter_type == *readonly* ]]; then
+        __zshenv_reject_definition $__zshenv_file $__zshenv_line_number 'cannot replace a read-only parameter'
         continue
       fi
-      if ! export "$name=$REPLY"; then
-        __zshenv_reject_definition $file $line_number 'could not export assignment'
+      if [[ -n $__zshenv_parameter_type && $__zshenv_parameter_type != scalar* ]]; then
+        __zshenv_reject_definition $__zshenv_file $__zshenv_line_number 'cannot replace a non-scalar parameter'
+        continue
       fi
-    done <$file
+      if ! export "$__zshenv_name=$__zshenv_REPLY"; then
+        __zshenv_reject_definition $__zshenv_file $__zshenv_line_number 'could not export assignment'
+      fi
+    done <$__zshenv_file
   done
 
-  if (( had_reject_definition )); then
-    functions[__zshenv_reject_definition]=$saved_reject_definition
+  if (( __zshenv_had_reject_definition )); then
+    functions[__zshenv_reject_definition]=$__zshenv_saved_reject_definition
   else
     unfunction __zshenv_reject_definition
   fi
-  if (( had_expand_value )); then
-    functions[__zshenv_expand_value]=$saved_expand_value
+  if (( __zshenv_had_expand_value )); then
+    functions[__zshenv_expand_value]=$__zshenv_saved_expand_value
   else
     unfunction __zshenv_expand_value
   fi
