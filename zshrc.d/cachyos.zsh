@@ -1,5 +1,5 @@
 
-export npm_config_prefix="$HOME/.local"
+#export npm_config_prefix="$HOME/.local"
 
 #source /usr/share/doc/pkgfile/command-not-found.zsh
 
