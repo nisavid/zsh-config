@@ -51,6 +51,18 @@ rehash
 [[ ${commands[k9s]:A} == ${shim_dir:A}/k9s ]] ||
   fail 'command lookup must prefer the managed k9s shim over Homebrew'
 
+login_zdotdir=$tmpdir/login-zdotdir
+mkdir -p -- $login_zdotdir
+ln -s -- $repo_root/zprofile.zsh $login_zdotdir/.zprofile
+login_target=$(
+  HOME=$fixture_home \
+    ZDOTDIR=$login_zdotdir \
+    PATH=$homebrew_prefix/bin:$shim_dir:/usr/bin:/bin \
+    zsh -d -lc 'print -r -- ${commands[k9s]:A}'
+)
+[[ $login_target == ${shim_dir:A}/k9s ]] ||
+  fail 'a login shell must restore the managed k9s shim after system PATH setup'
+
 openclaw_setup=$tmpdir/openclaw.zsh
 while IFS= read -r line; do
   if [[ $line == 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv zsh)"' ]]; then
