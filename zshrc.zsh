@@ -25,6 +25,7 @@ export KDE_SRC=~/src/kde
 
 function {
   local path_prefix_dirs=(
+    ~/.local/lib/secret-exec/bin
     ~/.lmstudio/bin
     $KDE_SRC/kdesrc-build
     ${KREW_ROOT:-$HOME/.krew}/bin
