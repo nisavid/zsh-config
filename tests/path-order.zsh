@@ -17,8 +17,9 @@ fixture_home=$tmpdir/home
 fixture_bin=$tmpdir/bin
 homebrew_prefix=$tmpdir/homebrew
 rustup_prefix=$tmpdir/rustup
+late_prefix=$tmpdir/late
 shim_dir=$fixture_home/.local/lib/secret-exec/bin
-mkdir -p -- $fixture_bin $homebrew_prefix/bin $rustup_prefix/bin $shim_dir
+mkdir -p -- $fixture_bin $homebrew_prefix/bin $rustup_prefix/bin $late_prefix/bin $shim_dir
 
 print -rl -- \
   '#!/usr/bin/env zsh' \
@@ -61,11 +62,14 @@ function {
   setopt localoptions noerrexit
   source $openclaw_setup
 }
-rehash
+path=( $late_prefix/bin $path )
+for late_path_setup in $repo_root/zshrc.d/zz-secret-exec.zsh(N); do
+  source $late_path_setup
+done
 
 [[ $path[1] == $shim_dir ]] ||
-  fail 'later startup scripts must preserve the managed shim directory first on PATH'
+  fail 'the final startup phase must restore the managed shim directory first on PATH'
 [[ ${commands[k9s]:A} == ${shim_dir:A}/k9s ]] ||
-  fail 'later startup scripts must not replace the managed k9s shim with Homebrew'
+  fail 'the final startup phase must restore the managed k9s shim after later PATH changes'
 
 print -r -- 'path-order checks passed'
