@@ -23,6 +23,7 @@ mkdir -p -- $fixture_bin $homebrew_prefix/bin $rustup_prefix/bin $shim_dir
 print -rl -- \
   '#!/usr/bin/env zsh' \
   'case $* in' \
+  "  'shellenv zsh') print -r -- 'export PATH=$homebrew_prefix/bin:\$PATH' ;;" \
   "  '--prefix rustup') print -r -- ${(q)rustup_prefix} ;;" \
   "  '--prefix') print -r -- ${(q)homebrew_prefix} ;;" \
   '  *) exit 64 ;;' \
@@ -48,5 +49,23 @@ rehash
   fail 'the managed secret-exec shim directory must remain first on PATH'
 [[ ${commands[k9s]:A} == ${shim_dir:A}/k9s ]] ||
   fail 'command lookup must prefer the managed k9s shim over Homebrew'
+
+openclaw_setup=$tmpdir/openclaw.zsh
+while IFS= read -r line; do
+  if [[ $line == 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv zsh)"' ]]; then
+    line="eval \"\$($fixture_bin/brew shellenv zsh)\""
+  fi
+  print -r -- $line
+done <$repo_root/zshrc.d/openclaw.zsh >$openclaw_setup
+function {
+  setopt localoptions noerrexit
+  source $openclaw_setup
+}
+rehash
+
+[[ $path[1] == $shim_dir ]] ||
+  fail 'later startup scripts must preserve the managed shim directory first on PATH'
+[[ ${commands[k9s]:A} == ${shim_dir:A}/k9s ]] ||
+  fail 'later startup scripts must not replace the managed k9s shim with Homebrew'
 
 print -r -- 'path-order checks passed'
