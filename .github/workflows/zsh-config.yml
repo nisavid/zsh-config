@@ -1,0 +1,113 @@
+name: Zsh configuration portability
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS 14
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run hermetic tests
+        run: zsh tests/run.zsh
+
+  debian:
+    name: Debian bookworm minimal
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: debian:bookworm-slim@sha256:63a496b5d3b99214b39f5ed70eb71a61e590a77979c79cbee4faf991f8c0783e
+    steps:
+      - name: Install required tools only
+        run: |
+          apt-get -qq update
+          apt-get -qq install -y --no-install-recommends ca-certificates git zsh
+
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Prove the minimal dependency boundary
+        shell: zsh -f {0}
+        run: |
+          (( $+commands[manpath] == 0 ))
+          ! grep -Eq 'rematch_pcre|zsh/pcre' zshrc.zsh
+
+      - name: Run hermetic tests
+        run: zsh tests/run.zsh
+
+  ubuntu:
+    name: Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Install Zsh
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y --no-install-recommends zsh
+
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run hermetic tests
+        run: zsh tests/run.zsh
+
+  cachyos:
+    name: CachyOS amd64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: cachyos/cachyos:latest@sha256:404ade704611732614fb8913b4a4663e39d39e7c5f1c3f91f422149a6041d97c
+    steps:
+      - name: Install Zsh
+        run: pacman -Syu --noconfirm --needed zsh
+
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run hermetic tests
+        run: /usr/bin/zsh tests/run.zsh
+
+  startup-portability:
+    name: startup portability
+    if: always()
+    needs:
+      - macos
+      - debian
+      - ubuntu
+      - cachyos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every platform
+        env:
+          MACOS_RESULT: ${{ needs.macos.result }}
+          DEBIAN_RESULT: ${{ needs.debian.result }}
+          UBUNTU_RESULT: ${{ needs.ubuntu.result }}
+          CACHYOS_RESULT: ${{ needs.cachyos.result }}
+        run: |
+          test "$MACOS_RESULT" = success
+          test "$DEBIAN_RESULT" = success
+          test "$UBUNTU_RESULT" = success
+          test "$CACHYOS_RESULT" = success
