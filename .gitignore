@@ -1,4 +1,6 @@
 .zcompdump
 .zsh_sessions/
 zshrc.d/*.disabled
+profile.d/*.enabled
+profile.d/*.local.zshrc
 *.local.zsh

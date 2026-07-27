@@ -24,6 +24,7 @@ TODO: Identify/track/report/fix that bug.
   - [⚡️ Performance](#readme-performance)
   - [🏪 Convenience](#readme-convenience)
   - [🦋 Visuals](#readme-visuals)
+- [🐚 Startup and PATH ownership](#readme-startup)
 - [🛠️ Installation](#readme-installation)
   - [Installation Method: Using Chezmoi](#installation-method-using-chezmoi)
   - [Installation Method: Manual](#installation-method-manual)
@@ -287,6 +288,90 @@ TODO: Identify/track/report/fix that bug.
 [**vivid**]: https://github.com/sharkdp/vivid
 [`bat --plain --language=help`]: https://github.com/sharkdp/bat#highlighting---help-messages
 [compare F-Sy-H]: https://www.githubcompare.com/z-shell/f-sy-h+zdharma-continuum/fast-syntax-highlighting
+
+<a id="readme-startup"></a>
+
+## 🐚 Startup and PATH ownership
+
+This repository owns the complete portable Zsh startup contract. A deployment
+tool may clone or update the repository and install supporting machine-specific
+files, but it must not write tracked files inside the checkout.
+
+The entrypoints follow one visible-source convention:
+
+| Entrypoint | Responsibility |
+| --- | --- |
+| `~/.zshenv → $ZDOTDIR/zshenv.zsh` | Sets `ZDOTDIR`, loads safe declarative assignments through `environment.zsh`, loads active all-process profiles, and applies the complete portable environment and PATH policy. |
+| `$ZDOTDIR/.zprofile → zprofile.zsh` | Reapplies the same policy after system login setup. It contains no interactive integration. |
+| `$ZDOTDIR/.zshrc → zshrc.zsh` | Owns interactive bootstrap, aliases, functions, terminal behavior, plugins, completions, and prompt setup. It reapplies the shared policy after integrations have loaded. |
+
+Zsh reads `.zshenv` for every invocation, `.zprofile` for login shells, and
+`.zshrc` for interactive shells. `.zlogin` is intentionally absent: environment
+and command lookup must be correct before login commands or interactive setup
+run.
+
+On macOS, `/etc/zprofile` runs `/usr/libexec/path_helper` before `.zprofile`.
+`path_helper` builds `PATH` from `/etc/paths` and `/etc/paths.d/*`, and builds
+`MANPATH` from `/etc/manpaths` and `/etc/manpaths.d/*`. It places those
+system-managed entries before inherited entries. `.zprofile` is therefore the
+first correct phase for restoring the portable order in both interactive and
+non-interactive login shells. `.zshenv` is too early because `path_helper`
+runs later; `.zshrc` misses non-interactive login shells.
+
+`startup.zsh` is the single PATH implementation. It uses Zsh's tied `path`
+array, directory tests, parameter expansion, and anonymous functions rather
+than subprocesses or leaked helper names. Every Zsh mode receives the same
+ordered, host-relative toolchain paths. Reapplying the policy is idempotent:
+
+- the managed path specification is checked for duplicate exact entries;
+- inherited exact duplicates are removed while preserving the first effective
+  entry;
+- unsafe empty PATH entries are removed;
+- canonically equivalent but textually distinct paths are reported
+  interactively without being rewritten; and
+- `fpath` and applicable colon-list environment variables receive the same
+  exact-duplicate checks. Empty entries with defined default-path semantics,
+  such as `MANPATH`, are preserved once.
+
+Routine cleanup is silent in non-interactive shells. Interactive startup reports
+configuration defects and inherited duplication until their sources are fixed.
+A malformed required fragment or failed optional integration is rejected, but
+startup preserves a usable degraded shell for repair.
+
+OrbStack's generated initializer combines PATH and completion behavior and is
+not idempotent, so it is not sourced. The optional OrbStack bin directory is
+part of the shared PATH policy; its completion directory is added only during
+interactive startup. Vite+'s environment file is likewise loaded interactively
+for its shell wrapper and completions, while `VP_HOME` and its bin directory are
+owned by the shared all-process policy.
+
+Optional host profiles live in `profile.d`. A `NAME.zshenv` fragment is
+all-process configuration; a `NAME.zshrc` fragment is interactive-only.
+`NAME.disabled` disables both phases by default, while a machine-local
+`NAME.enabled` file enables both without modifying tracked files.
+An existing `zshrc.d/NAME.local.zsh` also enables a matching split profile.
+The next self-update preserves its host-specific commands in
+the reserved `profile.d/NAME.legacy.local.zshrc` migration namespace,
+separate from independently maintained `NAME.local.zshrc` supplements.
+Migrated fragments remain interactive-only.
+
+GUI applications do not read Zsh startup files. A deployment adapter can source
+`startup.zsh` with the `launcher` phase to render the smaller core PATH for the
+platform's per-user launcher environment. The full developer toolchain remains
+Zsh-owned. The policy reserves the owned local-bin and AppImage roots before
+interactive bootstrap creates them; other optional roots require directory
+presence. It uses `HOME`, XDG roots, and an OSTYPE-compatible platform argument
+so the same configuration works on macOS, Linux, and WSL2 without embedded
+machine paths.
+
+The startup contract is covered by:
+
+```shell
+zsh tests/startup-matrix.zsh
+zsh tests/path-order.zsh
+zsh tests/profile-phases.zsh
+zsh tests/zshenv.zsh
+```
 
 <a id="readme-installation"></a>
 

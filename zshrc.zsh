@@ -5,49 +5,15 @@
 
 zmodload zsh/parameter
 
-BIN_HOME=~/.local/bin
-[[ -d $BIN_HOME ]] || mkdir -p -- "$BIN_HOME"
-
-APPIMAGE_HOME=~/.local/bin/appimage
-[[ -d $APPIMAGE_HOME ]] || mkdir -p -- "$APPIMAGE_HOME"
-
-if [[ -z $PNPM_HOME ]]; then
-  case $OSTYPE in
-    darwin*) PNPM_HOME=~/Library/pnpm ;;
-    *) PNPM_HOME=${XDG_DATA_HOME:-~/.local/share}/pnpm ;;
-  esac
+if [[ -r $ZDOTDIR/startup.zsh ]]; then
+  source $ZDOTDIR/startup.zsh zshrc-pre "$OSTYPE" ||
+    print -ru2 -- "zsh startup: portable environment policy failed before interactive setup"
+else
+  print -ru2 -- "zsh startup: required policy is missing: $ZDOTDIR/startup.zsh"
 fi
-export PNPM_HOME
 
-export KREW_ROOT=${XDG_DATA_HOME:-~/.local/share}/krew
-
-export KDE_SRC=~/src/kde
-
-function {
-  local path_prefix_dirs=(
-    ~/.local/lib/secret-exec/bin
-    ~/.lmstudio/bin
-    $KDE_SRC/kdesrc-build
-    ${KREW_ROOT:-$HOME/.krew}/bin
-    ~/.orbstack/bin
-    ~/.vite-plus/bin
-    ~/.bun/bin
-    $PNPM_HOME/bin
-    ~/.cargo/bin
-    ${GOBIN:-~/go/bin}
-    $APPIMAGE_HOME
-    /opt/podman/bin
-    $(brew --prefix rustup)/bin
-    $(brew --prefix)/bin
-  )
-
-  integer i;
-  for (( i = ${#path_prefix_dirs[@]}; i > 0; i-- )); do
-    [[ -d $path_prefix_dirs[i] ]] || path_prefix_dirs[i]=()
-  done
-
-  path=( $path_prefix_dirs $path )
-}
+[[ -z ${BIN_HOME:-} || -d $BIN_HOME ]] || mkdir -p -- "$BIN_HOME"
+[[ -z ${APPIMAGE_HOME:-} || -d $APPIMAGE_HOME ]] || mkdir -p -- "$APPIMAGE_HOME"
 
 # TODO: move to lazy init
 if (( $+commands[rgrc] )); then eval "$(rgrc --aliases)"
@@ -249,7 +215,24 @@ function {
 zmodload zsh/terminfo
 
 function {
-  readonly -aU terminfo_dirs=( ${(s<:>)TERMINFO_DIRS}(N-/:P) {/etc,/lib,/usr/share}/terminfo(N-/:P) )
+  local -a inherited_terminfo_dirs terminfo_dirs
+  local -A terminfo_seen
+  local terminfo_dir
+  if [[ -n ${TERMINFO_DIRS:-} ]]; then
+    inherited_terminfo_dirs=( "${(@s.:.)TERMINFO_DIRS}" )
+    for terminfo_dir in "${inherited_terminfo_dirs[@]}"; do
+      if [[ -z ${terminfo_seen[x$terminfo_dir]-} ]]; then
+        terminfo_dirs+=( "$terminfo_dir" )
+        terminfo_seen[x$terminfo_dir]=1
+      fi
+    done
+  fi
+  for terminfo_dir in /etc/terminfo /lib/terminfo /usr/share/terminfo; do
+    if [[ -d $terminfo_dir && -z ${terminfo_seen[x$terminfo_dir]-} ]]; then
+      terminfo_dirs+=( $terminfo_dir )
+      terminfo_seen[x$terminfo_dir]=1
+    fi
+  done
   export TERMINFO_DIRS=${(j<:>)terminfo_dirs}
 }
 
@@ -324,16 +307,21 @@ if [[ ! -r $ZI[BIN_DIR]/zi.zsh ]]; then
   }
 fi
 
+integer ZI_READY=0
 if [[ -r $ZI[BIN_DIR]/zi.zsh ]]; then
-  source $ZI[BIN_DIR]/zi.zsh \
-    || print -ru2 -- "Zi is installed but failed to load from ${(q-)ZI[BIN_DIR]/zi.zsh}."
+  if source $ZI[BIN_DIR]/zi.zsh && (( $+functions[zi] )); then
+    ZI_READY=1
+  else
+    (( ! $+functions[zi] )) || unfunction zi
+    print -ru2 -- \
+      "Zi is installed but failed to load from ${(q-)ZI[BIN_DIR]}/zi.zsh."
+  fi
 else
   print -ru2 -- "Zi is unavailable; shell plugins and the configured prompt will not be loaded."
 fi
-unset MANPATH
 
 ZI_LIGHT=1
-if (( $+functions[zi] )); then
+if (( ZI_READY )); then
   ## ZI | ZSH
   function {
     local -a system_completions=( /usr/share/zsh/functions/Completion/*/_*(N.) )
@@ -426,41 +414,254 @@ if (( $+functions[zi] )); then
     as:'null' \
     atpull:'rm -f init.zsh' \
     run-atpull \
-    atload:'[[ -e init.zsh ]] || print -n -- export -aUT MANPATH manpath=\( ${(s<:>q-)"$(manpath)"} \) >init.zsh' \
+    atinit:'local cache=${ZI[PLUGINS_DIR]}/manpath/init.zsh; [[ -r $cache && "$(<$cache)" == "export -aT MANPATH "* ]] || print -n -- export -aT MANPATH manpath=\( ${(s<:>q-)"$(manpath)"} \) >|$cache' \
     pick:'init.zsh' \
     for z-shell/0
-
-  function {
-    readonly script=~/.orbstack/shell/init.zsh
-    zi wait lucid ${ZI_LIGHT:+light-mode} \
-      id-as:'orbstack' \
-      if:"[[ -r $script ]]" \
-      as:'null' \
-      atload:"source '$script'" \
-      for z-shell/0
-  }
 
   ## ZI | LANGUAGES & TOOLKITS
 
   # Elm
   zi wait lucid ${ZI_LIGHT:+light-mode} atload:'elm-completion-update 2>/dev/null' for kraklin/elm.plugin.zsh
 
-  # Node (fnm)
-  zi wait lucid ${ZI_LIGHT:+light-mode} \
-    id-as:'fnm' \
-    if:'[[ ! -r ~/.vite-plus/env ]]' \
-    has:'fnm' \
-    as:'null' \
-    atload:'eval "$(fnm env --shell zsh --use-on-cd)"' \
-    for z-shell/0
+  function {
+    local repair_path='} always {
+      if [[ -r $ZDOTDIR/startup.zsh ]]; then
+        source $ZDOTDIR/startup.zsh zshrc-final "$OSTYPE"
+        __zshrc_repair_status=$?
+        (( __zshrc_repair_status == 0 )) ||
+          print -ru2 -- "zsh startup: portable environment policy failed after deferred $__zshrc_feature setup"
+      else
+        __zshrc_repair_status=1
+        print -ru2 -- "zsh startup: required policy is missing after deferred $__zshrc_feature setup: $ZDOTDIR/startup.zsh"
+      fi'
+    local fnm_init='function { emulate -L zsh; {
+      local __zshrc_environment __zshrc_feature=fnm __zshrc_line
+      local __zshrc_assignment __zshrc_name __zshrc_raw_value __zshrc_value
+      local __zshrc_chpwd_type __zshrc_expected_hook __zshrc_hook_body
+      local __zshrc_hook_declaration
+      local __zshrc_parameter_type
+      local __zshrc_path_prefix __zshrc_path_type __zshrc_PATH_type
+      local -a __zshrc_lines __zshrc_old_chpwd __zshrc_old_path
+      local -a __zshrc_required_names __zshrc_warn_functions __zshrc_words
+      local -A __zshrc_exports __zshrc_old_types __zshrc_old_values
+      integer __zshrc_apply_status __zshrc_chpwd_existed
+      integer __zshrc_conflict __zshrc_feature_status __zshrc_repair_status
+      integer __zshrc_hook_existed __zshrc_invalid
+      integer __zshrc_saw_path
+      __zshrc_required_names=(
+        FNM_MULTISHELL_PATH
+        FNM_VERSION_FILE_STRATEGY
+        FNM_DIR
+        FNM_LOGLEVEL
+        FNM_NODE_DIST_MIRROR
+        FNM_COREPACK_ENABLED
+        FNM_RESOLVE_ENGINES
+        FNM_ARCH
+      )
+      __zshrc_expected_hook=$(
+        function __zshrc_expected_fnm_autoload_hook {
+          if [[ -f .node-version || -f .nvmrc || -f package.json ]]; then
+            fnm use --silent-if-unchanged
+          fi
+        }
+        print -rn -- $functions[__zshrc_expected_fnm_autoload_hook]
+      )
+      __zshrc_environment=$(fnm env --shell zsh)
+      __zshrc_feature_status=$?
+      if (( __zshrc_feature_status )); then
+        print -ru2 -- "fnm is available but failed to generate shell environment output (status $__zshrc_feature_status)."
+      elif [[ -z $__zshrc_environment ]]; then
+        __zshrc_feature_status=1
+        print -ru2 -- "fnm produced no shell environment output."
+      else
+        __zshrc_lines=( ${(f)__zshrc_environment} )
+        for __zshrc_line in $__zshrc_lines; do
+          [[ $__zshrc_line == rehash ]] && continue
+          __zshrc_words=( ${(z)__zshrc_line} )
+          if (( $#__zshrc_words != 2 )) || [[ $__zshrc_words[1] != export ]]; then
+            __zshrc_invalid=1
+            break
+          fi
+          __zshrc_assignment=$__zshrc_words[2]
+          __zshrc_name=${__zshrc_assignment%%=*}
+          __zshrc_raw_value=${__zshrc_assignment#*=}
+          [[ $__zshrc_assignment == *=* ]] || {
+            __zshrc_invalid=1
+            break
+          }
+          __zshrc_value=${(Q)__zshrc_raw_value}
+          if [[ $__zshrc_name == PATH ]]; then
+            if (( __zshrc_saw_path )) || [[ $__zshrc_value != *":\$PATH" ]]; then
+              __zshrc_invalid=1
+              break
+            fi
+            __zshrc_saw_path=1
+            __zshrc_path_prefix=${__zshrc_value%:\$PATH}
+            continue
+          fi
+          case $__zshrc_name in
+            (FNM_MULTISHELL_PATH|FNM_VERSION_FILE_STRATEGY|FNM_DIR|FNM_LOGLEVEL|FNM_NODE_DIST_MIRROR|FNM_COREPACK_ENABLED|FNM_RESOLVE_ENGINES|FNM_ARCH) ;;
+            (*)
+              __zshrc_invalid=1
+              break
+              ;;
+          esac
+          (( ! ${+__zshrc_exports[$__zshrc_name]} )) || {
+            __zshrc_invalid=1
+            break
+          }
+          __zshrc_exports[$__zshrc_name]=$__zshrc_value
+        done
+        for __zshrc_name in $__zshrc_required_names; do
+          [[ -n ${__zshrc_exports[$__zshrc_name]-} ]] || {
+            __zshrc_invalid=1
+            break
+          }
+        done
+        if (( ! __zshrc_invalid )); then
+          [[ ${__zshrc_exports[FNM_MULTISHELL_PATH]} == /* &&
+            $__zshrc_path_prefix == ${__zshrc_exports[FNM_MULTISHELL_PATH]}/bin ]] ||
+            __zshrc_invalid=1
+        fi
+        if (( ! __zshrc_invalid )); then
+          for __zshrc_name in $__zshrc_required_names; do
+            __zshrc_parameter_type=${parameters[$__zshrc_name]-}
+            [[ -z $__zshrc_parameter_type ||
+              $__zshrc_parameter_type == scalar ||
+              $__zshrc_parameter_type == scalar-export ]] || {
+              __zshrc_conflict=1
+              break
+            }
+            __zshrc_old_types[$__zshrc_name]=$__zshrc_parameter_type
+            __zshrc_old_values[$__zshrc_name]=${(P)__zshrc_name}
+          done
+          __zshrc_path_type=${parameters[path]-}
+          __zshrc_PATH_type=${parameters[PATH]-}
+          __zshrc_chpwd_type=${parameters[chpwd_functions]-}
+          [[ $__zshrc_path_type == *array* &&
+            $__zshrc_path_type == *tied* &&
+            $__zshrc_path_type != *readonly* &&
+            $__zshrc_PATH_type == *scalar* &&
+            $__zshrc_PATH_type == *tied* &&
+            $__zshrc_PATH_type != *readonly* &&
+            ( -z $__zshrc_chpwd_type || $__zshrc_chpwd_type == array ) ]] ||
+            __zshrc_conflict=1
+          if (( ${+dis_functions[_fnm_autoload_hook]} )); then
+            __zshrc_conflict=1
+          elif (( ${+functions[_fnm_autoload_hook]} )); then
+            __zshrc_hook_body=$functions[_fnm_autoload_hook]
+            __zshrc_hook_declaration=$(builtin typeset -fp _fnm_autoload_hook)
+            __zshrc_warn_functions=( ${(f)"$(builtin functions +W)"} )
+            [[ $__zshrc_hook_body == $__zshrc_expected_hook &&
+              $__zshrc_hook_declaration != *"# traced"* ]] &&
+              (( ! ${__zshrc_warn_functions[(I)_fnm_autoload_hook]} )) ||
+              __zshrc_conflict=1
+          fi
+        fi
+        if (( __zshrc_invalid || ! __zshrc_saw_path )); then
+          __zshrc_feature_status=1
+          print -ru2 -- "fnm generated unsupported shell environment output."
+        elif (( __zshrc_conflict )); then
+          __zshrc_feature_status=1
+          print -ru2 -- "fnm generated shell environment output that conflicts with existing shell parameter state."
+        else
+          __zshrc_old_path=( $path )
+          __zshrc_chpwd_existed=${+chpwd_functions}
+          (( __zshrc_chpwd_existed )) &&
+            __zshrc_old_chpwd=( $chpwd_functions )
+          __zshrc_hook_existed=${+functions[_fnm_autoload_hook]}
 
-  # Vite+ — wait'2' so it loads after compinit (wait'1') and its vp/vpr
-  # completions register; the snippet also defines the vp() wrapper.
-  #zi wait'2' lucid ${ZI_LIGHT:+light-mode} \
-  #  id-as:'vite-plus' \
-  #  if:'[[ -r ~/.vite-plus/env ]]' \
-  #  is-snippet \
-  #  for ~/.vite-plus/env
+          autoload -Uz add-zsh-hook
+          add-zsh-hook -h >/dev/null 2>&1 ||
+            __zshrc_apply_status=$?
+          if (( ! __zshrc_apply_status && ! __zshrc_hook_existed )); then
+            function _fnm_autoload_hook {
+              if [[ -f .node-version || -f .nvmrc || -f package.json ]]; then
+                fnm use --silent-if-unchanged
+              fi
+            }
+          fi
+          if (( ! __zshrc_apply_status )); then
+            add-zsh-hook -D chpwd _fnm_autoload_hook ||
+              __zshrc_apply_status=$?
+          fi
+          if (( ! __zshrc_apply_status )); then
+            add-zsh-hook chpwd _fnm_autoload_hook ||
+              __zshrc_apply_status=$?
+          fi
+          if (( ! __zshrc_apply_status &&
+            ! ${chpwd_functions[(I)_fnm_autoload_hook]} )); then
+            __zshrc_apply_status=1
+          fi
+          for __zshrc_name in $__zshrc_required_names; do
+            (( __zshrc_apply_status )) && break
+            export "$__zshrc_name=${__zshrc_exports[$__zshrc_name]}"
+            __zshrc_apply_status=$?
+          done
+          if (( ! __zshrc_apply_status )); then
+            if [[ -n ${__zshrc_old_types[FNM_MULTISHELL_PATH]} &&
+              -n ${__zshrc_old_values[FNM_MULTISHELL_PATH]} ]]; then
+              path=( ${path:#${__zshrc_old_values[FNM_MULTISHELL_PATH]}/bin} )
+            fi
+            path=( $__zshrc_path_prefix $path )
+            __zshrc_apply_status=$?
+          fi
+          if (( __zshrc_apply_status )); then
+            path=( $__zshrc_old_path )
+            if (( __zshrc_chpwd_existed )); then
+              chpwd_functions=( $__zshrc_old_chpwd )
+            else
+              unset chpwd_functions
+            fi
+            (( __zshrc_hook_existed )) ||
+              unset "functions[_fnm_autoload_hook]"
+            for __zshrc_name in $__zshrc_required_names; do
+              if [[ -z ${__zshrc_old_types[$__zshrc_name]} ]]; then
+                unset "$__zshrc_name"
+              else
+                typeset -g "$__zshrc_name=${__zshrc_old_values[$__zshrc_name]}"
+                if [[ ${__zshrc_old_types[$__zshrc_name]} == scalar-export ]]; then
+                  export "$__zshrc_name"
+                else
+                  typeset +gx "$__zshrc_name"
+                fi
+              fi
+            done
+            __zshrc_feature_status=1
+            print -ru2 -- "fnm generated shell environment output that could not be applied safely."
+          fi
+          rehash
+        fi
+      fi'
+    local vite_init='function { emulate -L zsh; {
+      local __zshrc_feature="Vite+"
+      integer __zshrc_feature_status __zshrc_repair_status
+      source ~/.vite-plus/env
+      __zshrc_feature_status=$?
+      (( __zshrc_feature_status == 0 )) ||
+        print -ru2 -- "Vite+ is installed but failed to load from ~/.vite-plus/env (status $__zshrc_feature_status)."'
+    local finish_action='} }'
+
+    # Node (fnm)
+    # Zi's ordinary deferred atload does not publish task status; explicit
+    # diagnostics and the final PATH repair are the observable failure contract.
+    zi wait lucid ${ZI_LIGHT:+light-mode} \
+      id-as:'fnm' \
+      if:'[[ ! -r ~/.vite-plus/env ]]' \
+      has:'fnm' \
+      as:'null' \
+      atload:"$fnm_init $repair_path $finish_action" \
+      for z-shell/0
+
+    # Vite+ — wait'2' so it loads after compinit (wait'1') and its vp/vpr
+    # completions register; the snippet also defines the vp() wrapper.
+    zi wait'2' lucid ${ZI_LIGHT:+light-mode} \
+      id-as:'vite-plus' \
+      if:'[[ -r ~/.vite-plus/env ]]' \
+      as:'null' \
+      atload:"$vite_init $repair_path $finish_action" \
+      for z-shell/0
+  }
 
   # KDE
   function {
@@ -486,7 +687,7 @@ if (( $+functions[zi] )); then
     as:'null' \
     atpull:'rm -f init.zsh' \
     run-atpull \
-    atload:'[[ -e init.zsh ]] || print -n -- export NVIM_QT_RUNTIME_PATH=${(q-)${${(M)${(f)"$(nvim-qt --version)"}:#[[:blank:]]#runtime:[[:blank:]]##*}#[[:blank:]]#runtime:[[:blank:]]##}:P} >init.zsh' \
+    atinit:'local cache=${ZI[PLUGINS_DIR]}/nvim-qt-runtime-path/init.zsh; [[ -r $cache ]] || print -n -- export NVIM_QT_RUNTIME_PATH=${(q-)${${(M)${(f)"$(nvim-qt --version)"}:#[[:blank:]]#runtime:[[:blank:]]##*}#[[:blank:]]#runtime:[[:blank:]]##}:P} >|$cache' \
     pick:'init.zsh' \
     for z-shell/0
 
@@ -586,7 +787,12 @@ else
     bashcompinit
     source /opt/adguard-cli/bash-completion.sh
   fi
+  if [[ -r ~/.vite-plus/env ]]; then
+    source ~/.vite-plus/env ||
+      print -ru2 -- "Vite+ is installed but failed to load from ~/.vite-plus/env."
+  fi
 fi
+unset ZI_READY
 
 
 ## BUILT-IN SETTINGS
@@ -1242,16 +1448,100 @@ function zi-update {
 }
 
 function zsh-config-update {
+  emulate -L zsh
+  setopt extended_glob
+
   [[ -d $ZDOTDIR_ORIGIN ]] || return
   [[ -d $ZDOTDIR:h ]] || mkdir -p -- $ZDOTDIR:h || return
   [[ -e $ZDOTDIR && ! -w $ZDOTDIR ]] && { print -r "error: not writable:" ${(q-)ZDOTDIR}; return }
 
-  readonly tmp=$ZDOTDIR.$RANDOM || return
+  local -a local_profiles
+  if [[ -d $ZDOTDIR/profile.d ]]; then
+    if (( ! $+commands[git] )) ||
+      ! command git -C "$ZDOTDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      print -ru2 -- \
+        "Unable to update Zsh config: cannot classify local profiles in ${(q-)ZDOTDIR}."
+      return 1
+    fi
+    local local_profile relative_profile
+    for local_profile in $ZDOTDIR/profile.d/*(N); do
+      relative_profile=profile.d/$local_profile:t
+      if command git -C "$ZDOTDIR" ls-files --error-unmatch -- \
+        "$relative_profile" >/dev/null 2>&1 &&
+        command git -C "$ZDOTDIR" diff --quiet -- "$relative_profile" &&
+        command git -C "$ZDOTDIR" diff --cached --quiet -- "$relative_profile"; then
+        continue
+      fi
+      local_profiles+=( $local_profile )
+    done
+  fi
+
+  readonly tmp=$(command mktemp -d "$ZDOTDIR.XXXXXX") || return
   trap 'rm -rf $tmp' EXIT
-  cp --archive -- $ZDOTDIR_ORIGIN $tmp || return
+  cp -a -- $ZDOTDIR_ORIGIN/. $tmp || return
+  if (( $#local_profiles )); then
+    mkdir -p -- $tmp/profile.d || return
+    cp -a -- $local_profiles $tmp/profile.d/ || return
+  fi
+  local legacy_profile legacy_name legacy_destination stale_destination
+  local existing_migration
+  local -a existing_migrations stale_migrations
   if [[ -d $ZDOTDIR/zshrc.d ]]; then
-    mkdir -p -- $tmp/zshrc.d || return
-    cp --archive --update -- $ZDOTDIR/zshrc.d/* $tmp/zshrc.d/ || return
+    integer legacy_suffix legacy_already_migrated
+    mkdir -p -- $tmp/profile.d || return
+    for legacy_profile in $ZDOTDIR/zshrc.d/*.local.zsh(N-.r); do
+      legacy_name=${${legacy_profile:t}%.local.zsh}
+      if [[ -e $tmp/profile.d/$legacy_name.zshenv ||
+        -h $tmp/profile.d/$legacy_name.zshenv ||
+        -e $tmp/profile.d/$legacy_name.zshrc ||
+        -h $tmp/profile.d/$legacy_name.zshrc ]]; then
+        touch -- $tmp/profile.d/$legacy_name.enabled || return
+      fi
+      legacy_destination=$tmp/profile.d/$legacy_name.legacy.local.zshrc
+      legacy_suffix=1
+      legacy_already_migrated=0
+      while [[ -e $legacy_destination || -h $legacy_destination ]]; do
+        if [[ ! -h $legacy_destination && -f $legacy_destination ]]; then
+          if (( ! $+commands[cmp] )); then
+            print -ru2 -- \
+              "Unable to update Zsh config: cmp is required to classify ${(q-)legacy_destination}."
+            return 1
+          fi
+          if command cmp -s -- $legacy_profile $legacy_destination; then
+            legacy_already_migrated=1
+          fi
+          break
+        fi
+        (( legacy_suffix++ ))
+        legacy_destination=$tmp/profile.d/$legacy_name.legacy-$legacy_suffix.local.zshrc
+      done
+      (( legacy_already_migrated )) ||
+        cp -a -- $legacy_profile $legacy_destination || return
+      stale_migrations=(
+        $tmp/profile.d/$legacy_name.legacy.local.zshrc(N)
+        $tmp/profile.d/$legacy_name.legacy-<->.local.zshrc(N)
+      )
+      for stale_destination in $stale_migrations; do
+        [[ $stale_destination == "$legacy_destination" ||
+          -h $stale_destination ]] && continue
+        rm -f -- $stale_destination || return
+      done
+      rm -f -- $tmp/zshrc.d/$legacy_profile:t || return
+    done
+  fi
+  if [[ -d $tmp/zshrc.d ]]; then
+    for legacy_profile in $tmp/zshrc.d/*.local.zsh(N-.r); do
+      legacy_name=${${legacy_profile:t}%.local.zsh}
+      existing_migrations=()
+      for existing_migration in \
+        $tmp/profile.d/$legacy_name.legacy.local.zshrc(N-.r) \
+        $tmp/profile.d/$legacy_name.legacy-<->.local.zshrc(N-.r); do
+        [[ -h $existing_migration ]] ||
+          existing_migrations+=( $existing_migration )
+      done
+      (( $#existing_migrations )) || continue
+      rm -f -- $legacy_profile || return
+    done
   fi
   rm -rf $ZDOTDIR || return
   mv -- $tmp $ZDOTDIR || return
@@ -1368,7 +1658,7 @@ alias visudo='sudo visudo'
 alias vnvim="in-dir ${(q-)XDG_CONFIG_HOME:-~/.config}/nvim nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
 alias vup="in-dir ~ nvim -c 'AstroUpdate' -c 'TSUpdate' -c 'Lazy'"
 #alias vzsh="in-dir ${(q-)ZDOTDIR} nvim -c 'lua require(\"resession\").load(vim.fn.getcwd(), { dir = \"dirsession\" })'"
-alias vzsh='v -p ~/.config/zsh/zshrc.{zsh,d/*}'
+alias vzsh='v -p ~/.config/zsh/{zshrc.zsh,profile.d/*}'
 alias zup='zsh-update'
 
 #alias -g -- --help='--help 2>&1 | bat --plain --language=help'
@@ -1380,13 +1670,18 @@ alias zup='zsh-update'
 
 [[ -d /run/media/$USER ]] && hash -d media=/run/media/$USER
 
-if [[ -d $ZDOTDIR/zshrc.d ]]; then
-  function {
-    local zshrc
-    for zshrc in $ZDOTDIR/zshrc.d/*.zsh; do
-      [[ -r $zshrc && ! -e $zshrc.disabled ]] && source $zshrc
-    done
-  }
+if [[ -r $ZDOTDIR/profiles.zsh ]]; then
+  source $ZDOTDIR/profiles.zsh zshrc ||
+    print -ru2 -- "zsh startup: optional interactive profiles failed in .zshrc"
+else
+  print -ru2 -- "zsh startup: required profile dispatcher is missing: $ZDOTDIR/profiles.zsh"
+fi
+
+if [[ -r $ZDOTDIR/startup.zsh ]]; then
+  source $ZDOTDIR/startup.zsh zshrc-final "$OSTYPE" ||
+    print -ru2 -- "zsh startup: portable environment policy failed after interactive setup"
+else
+  print -ru2 -- "zsh startup: required policy is missing: $ZDOTDIR/startup.zsh"
 fi
 
 # Load full prompt

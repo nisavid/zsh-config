@@ -1,6 +1,6 @@
-function {
-  local shim_dir=~/.local/lib/secret-exec/bin
-  [[ -d $shim_dir ]] || return
-  path=( $shim_dir ${path:#$shim_dir} )
-  rehash
-}
+if [[ -r $ZDOTDIR/startup.zsh ]]; then
+  source $ZDOTDIR/startup.zsh zprofile "$OSTYPE" ||
+    print -ru2 -- "zsh startup: portable environment policy failed in .zprofile"
+else
+  print -ru2 -- "zsh startup: required policy is missing: $ZDOTDIR/startup.zsh"
+fi
