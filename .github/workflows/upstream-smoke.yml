@@ -1,0 +1,64 @@
+name: Upstream Zi smoke
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run real-Zi smoke
+        run: zsh tests/upstream-smoke.zsh
+
+  ubuntu:
+    name: Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Install Zsh
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y --no-install-recommends zsh
+
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run real-Zi smoke
+        run: zsh tests/upstream-smoke.zsh
+
+  cachyos-current:
+    name: CachyOS current
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # This advisory lane intentionally tracks current CachyOS; required CI pins its digest.
+      image: cachyos/cachyos:latest
+    steps:
+      - name: Install Zsh
+        run: pacman -Syu --noconfirm --needed zsh
+
+      - name: Check out configuration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Run real-Zi smoke
+        run: /usr/bin/zsh tests/upstream-smoke.zsh

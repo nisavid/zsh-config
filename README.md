@@ -297,6 +297,12 @@ This repository owns the complete portable Zsh startup contract. A deployment
 tool may clone or update the repository and install supporting machine-specific
 files, but it must not write tracked files inside the checkout.
 
+The supported runtime is Zsh 5.9 or newer on macOS, Debian/Ubuntu, and
+Arch-family distributions including CachyOS. WSL2 follows the Linux contract:
+an `OSTYPE` value such as `linux-gnu-wsl` selects Linux behavior and does not
+activate macOS-only integration. Other Unix-like systems may work, but they are
+not part of the required portability matrix.
+
 The entrypoints follow one visible-source convention:
 
 | Entrypoint | Responsibility |
@@ -364,14 +370,21 @@ presence. It uses `HOME`, XDG roots, and an OSTYPE-compatible platform argument
 so the same configuration works on macOS, Linux, and WSL2 without embedded
 machine paths.
 
-The startup contract is covered by:
+The required test suite is hermetic: it owns its home directories, renderers,
+completion state, `manpath`, and Git repositories. It requires Zsh 5.9 or newer,
+Git, and standard Unix tools (`cat`, `chmod`, `cp`, `env`, `grep`, `ln`,
+`mkdir`, `mktemp`, `mv`, `readlink`, `rm`, `rmdir`, `sed`, `touch`, `tr`, and
+`wc`). Run all five repository tests through the stable entrypoint:
 
 ```shell
-zsh tests/startup-matrix.zsh
-zsh tests/path-order.zsh
-zsh tests/profile-phases.zsh
-zsh tests/zshenv.zsh
+zsh tests/run.zsh
 ```
+
+`tests/upstream-smoke.zsh` is a separate advisory integration test. It requires
+network access and a PTY-capable Zsh, installs real Zi into a fresh temporary
+home, and performs two interactive startups. Required pull-request checks use
+only the hermetic suite; the upstream smoke runs weekly and on manual dispatch
+so an upstream outage cannot block an otherwise portable configuration change.
 
 <a id="readme-installation"></a>
 
