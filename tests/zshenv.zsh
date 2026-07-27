@@ -3,7 +3,10 @@
 emulate -L zsh
 setopt errexit nounset pipefail
 
-readonly loader=${0:A:h:h}/zshenv.zsh
+readonly entrypoint=${0:A:h:h}/zshenv.zsh
+readonly loader=${0:A:h:h}/environment.zsh
+readonly profile_dispatcher=${0:A:h:h}/profiles.zsh
+readonly startup_policy=${0:A:h:h}/startup.zsh
 grep -Fxq '# secret-exec-environment-loader-v1' $loader
 tmpdir=$(mktemp -d)
 readonly tmpdir
@@ -65,7 +68,10 @@ function test_public_expansion_and_order {
     { fail 'accepted path assignment must be exported'; return 1 }
   env | grep -Fxq -- "COMPOSED=/srv/share:$root/home/fallback" ||
     { fail 'accepted composed assignment must be exported'; return 1 }
-  (( ! ${+functions[__zshenv_expand_value]} && ! ${+functions[__zshenv_reject_definition]} )) ||
+  (( ! ${+functions[__zshenv_expand_value]} &&
+      ! ${+functions[__zshenv_append_reference]} &&
+      ! ${+functions[__zshenv_parse_braced_body]} &&
+      ! ${+functions[__zshenv_reject_definition]} )) ||
     { fail 'loader helpers must not remain in the shell'; return 1 }
 }
 
@@ -89,6 +95,11 @@ function test_executable_and_malformed_syntax_is_rejected {
     'SPECIAL_STATUS=$?' \
     'SPECIAL_PID=$$' \
     'SPECIAL_LENGTH=${#SAFE_DEFAULT}' \
+    'UNSUPPORTED_COLON_PLUS=${SAFE_DEFAULT:+alternate}' \
+    'UNSUPPORTED_PLUS=${SAFE_DEFAULT+alternate}' \
+    'UNSUPPORTED_EQUALS=${UNSET_VALUE=assigned}' \
+    'ARRAY_VALUE=$EXPANSION_ARRAY' \
+    'ASSOC_VALUE=${EXPANSION_ASSOC}' \
     '1INVALID=value' \
     'NO_EQUALS' \
     'UNTERMINATED="value' \
@@ -96,6 +107,9 @@ function test_executable_and_malformed_syntax_is_rejected {
     'AFTER_REJECT=loaded'
 
   local HOME=$root/home XDG_CONFIG_HOME=$root PATH=/usr/bin:/bin
+  local -a EXPANSION_ARRAY=( one two )
+  local -A EXPANSION_ASSOC=( key value )
+  unset UNSET_VALUE
   source $loader 2>$parse_log || true
 
   [[ ! -e $sentinel.dollar ]] || { fail 'dollar command substitution executed'; return 1 }
@@ -113,14 +127,20 @@ function test_executable_and_malformed_syntax_is_rejected {
   (( ! ${+SPECIAL_STATUS} )) || { fail 'status parameter expansion was exported'; return 1 }
   (( ! ${+SPECIAL_PID} )) || { fail 'PID parameter expansion was exported'; return 1 }
   (( ! ${+SPECIAL_LENGTH} )) || { fail 'parameter length expansion was exported'; return 1 }
+  (( ! ${+UNSUPPORTED_COLON_PLUS} )) || { fail 'unsupported colon-plus expansion was exported'; return 1 }
+  (( ! ${+UNSUPPORTED_PLUS} )) || { fail 'unsupported plus expansion was exported'; return 1 }
+  (( ! ${+UNSUPPORTED_EQUALS} && ! ${+UNSET_VALUE} )) ||
+    { fail 'unsupported assignment expansion changed shell state'; return 1 }
+  (( ! ${+ARRAY_VALUE} )) || { fail 'array expansion was exported'; return 1 }
+  (( ! ${+ASSOC_VALUE} )) || { fail 'associative-array expansion was exported'; return 1 }
   (( ! ${+NO_EQUALS} )) || { fail 'line without assignment was exported'; return 1 }
   (( ! ${+UNTERMINATED} )) || { fail 'unterminated quote was exported'; return 1 }
   (( ! ${+STRAY_BRACE} )) || { fail 'stray parameter brace was exported'; return 1 }
   (( $(grep -Fc 'expected NAME=VALUE assignment' $parse_log) == 2 )) ||
     { fail 'every malformed assignment must emit a rejection diagnostic'; return 1 }
-  (( $(grep -Fc 'unsupported or malformed value syntax' $parse_log) == 12 )) ||
+  (( $(grep -Fc 'unsupported or malformed value syntax' $parse_log) == 17 )) ||
     { fail 'every executable or malformed value must emit a rejection diagnostic'; return 1 }
-  (( $(wc -l <$parse_log) == 14 )) ||
+  (( $(wc -l <$parse_log) == 19 )) ||
     { fail 'the rejection log must contain exactly one diagnostic per rejected definition'; return 1 }
   [[ $AFTER_REJECT == loaded ]] || { fail 'a rejected line prevented later valid assignments'; return 1 }
 }
@@ -133,8 +153,11 @@ function test_pre_enabled_xtrace_hides_values {
   local trace_log=$root/trace.log
   local canary=ZSHENV_TRACE_CANARY_7f31d
   local zsh_path=${commands[zsh]:A}
-  mkdir -p -- $root/home/.config
-  ln -s -- $loader $root/home/.zshenv
+  mkdir -p -- $root/home/.config/zsh
+  ln -s -- $entrypoint $root/home/.zshenv
+  ln -s -- $loader $root/home/.config/zsh/environment.zsh
+  ln -s -- $profile_dispatcher $root/home/.config/zsh/profiles.zsh
+  ln -s -- $startup_policy $root/home/.config/zsh/startup.zsh
   write_lines $root/home/.config/environment.d/00-trace.conf \
     "TRACE_VALUE=$canary" \
     "TRACE_COMPOSED=prefix-\${TRACE_VALUE}"
@@ -239,8 +262,12 @@ function test_existing_helpers_are_preserved {
   write_lines $root/environment.d/00-helper.conf 'HELPER_VALUE=loaded'
 
   function __zshenv_reject_definition { return 17 }
-  function __zshenv_expand_value { return 19 }
+  function __zshenv_parse_braced_body { return 18 }
+  function __zshenv_append_reference { return 19 }
+  function __zshenv_expand_value { return 20 }
   local reject_definition=$functions[__zshenv_reject_definition]
+  local parse_braced_body=$functions[__zshenv_parse_braced_body]
+  local append_reference=$functions[__zshenv_append_reference]
   local expand_value=$functions[__zshenv_expand_value]
   local HOME=$root/home XDG_CONFIG_HOME=$root PATH=/usr/bin:/bin
   source $loader
@@ -248,9 +275,17 @@ function test_existing_helpers_are_preserved {
   [[ $HELPER_VALUE == loaded ]] || { fail 'existing helper names prevented loading'; return 1 }
   [[ $functions[__zshenv_reject_definition] == $reject_definition ]] ||
     { fail 'existing rejection helper was not restored'; return 1 }
+  [[ $functions[__zshenv_parse_braced_body] == $parse_braced_body ]] ||
+    { fail 'existing braced-parameter helper was not restored'; return 1 }
+  [[ $functions[__zshenv_append_reference] == $append_reference ]] ||
+    { fail 'existing reference-resolution helper was not restored'; return 1 }
   [[ $functions[__zshenv_expand_value] == $expand_value ]] ||
     { fail 'existing expansion helper was not restored'; return 1 }
-  unfunction __zshenv_reject_definition __zshenv_expand_value
+  unfunction \
+    __zshenv_reject_definition \
+    __zshenv_parse_braced_body \
+    __zshenv_append_reference \
+    __zshenv_expand_value
 }
 
 integer failed=0

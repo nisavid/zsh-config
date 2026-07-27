@@ -14,36 +14,21 @@ function fail {
 }
 
 fixture_home=$tmpdir/home
-fixture_bin=$tmpdir/bin
 homebrew_prefix=$tmpdir/homebrew
-rustup_prefix=$tmpdir/rustup
 late_prefix=$tmpdir/late
 shim_dir=$fixture_home/.local/lib/secret-exec/bin
-mkdir -p -- $fixture_bin $homebrew_prefix/bin $rustup_prefix/bin $late_prefix/bin $shim_dir
+mkdir -p -- $homebrew_prefix/bin $late_prefix/bin $shim_dir
 
-print -rl -- \
-  '#!/usr/bin/env zsh' \
-  'case $* in' \
-  "  'shellenv zsh') print -r -- 'export PATH=$homebrew_prefix/bin:\$PATH' ;;" \
-  "  '--prefix rustup') print -r -- ${(q)rustup_prefix} ;;" \
-  "  '--prefix') print -r -- ${(q)homebrew_prefix} ;;" \
-  '  *) exit 64 ;;' \
-  'esac' >$fixture_bin/brew
 print -rl -- '#!/usr/bin/env zsh' 'exit 0' >$shim_dir/k9s
 print -rl -- '#!/usr/bin/env zsh' 'exit 0' >$homebrew_prefix/bin/k9s
-chmod +x $fixture_bin/brew $shim_dir/k9s $homebrew_prefix/bin/k9s
-
-path_setup=$tmpdir/path-setup.zsh
-typeset -a setup_lines
-while IFS= read -r line; do
-  [[ $line == '# TODO: move to lazy init' ]] && break
-  setup_lines+=($line)
-done <$repo_root/zshrc.zsh
-print -rl -- $setup_lines >$path_setup
+chmod +x $shim_dir/k9s $homebrew_prefix/bin/k9s
 
 HOME=$fixture_home
-PATH=$shim_dir:$fixture_bin:/usr/bin:/bin
-source $path_setup
+PATH=$shim_dir:/usr/bin:/bin
+unset BIN_HOME APPIMAGE_HOME KREW_ROOT KDE_SRC VP_HOME PNPM_HOME
+XDG_DATA_HOME=$fixture_home/.local/share
+HOMEBREW_PREFIX=$homebrew_prefix
+source $repo_root/startup.zsh zshenv "$OSTYPE"
 rehash
 
 [[ $path[1] == $shim_dir ]] ||
@@ -51,37 +36,21 @@ rehash
 [[ ${commands[k9s]:A} == ${shim_dir:A}/k9s ]] ||
   fail 'command lookup must prefer the managed k9s shim over Homebrew'
 
-login_zdotdir=$tmpdir/login-zdotdir
-mkdir -p -- $login_zdotdir
-ln -s -- $repo_root/zprofile.zsh $login_zdotdir/.zprofile
-login_target=$(
-  HOME=$fixture_home \
-    ZDOTDIR=$login_zdotdir \
-    PATH=$homebrew_prefix/bin:$shim_dir:/usr/bin:/bin \
-    zsh -d -lc 'print -r -- ${commands[k9s]:A}'
-)
-[[ $login_target == ${shim_dir:A}/k9s ]] ||
-  fail 'a login shell must restore the managed k9s shim after system PATH setup'
-
-openclaw_setup=$tmpdir/openclaw.zsh
-while IFS= read -r line; do
-  if [[ $line == 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv zsh)"' ]]; then
-    line="eval \"\$($fixture_bin/brew shellenv zsh)\""
-  fi
-  print -r -- $line
-done <$repo_root/zshrc.d/openclaw.zsh >$openclaw_setup
-function {
-  setopt localoptions noerrexit
-  source $openclaw_setup
-}
-path=( $late_prefix/bin $path )
-for late_path_setup in $repo_root/zshrc.d/zz-secret-exec.zsh(N); do
-  source $late_path_setup
-done
+path=( $homebrew_prefix/bin $late_prefix/bin $path $homebrew_prefix/bin )
+source $repo_root/startup.zsh zshrc-final "$OSTYPE"
 
 [[ $path[1] == $shim_dir ]] ||
   fail 'the final startup phase must restore the managed shim directory first on PATH'
 [[ ${commands[k9s]:A} == ${shim_dir:A}/k9s ]] ||
   fail 'the final startup phase must restore the managed k9s shim after later PATH changes'
+integer homebrew_count=0 late_count=0
+for path_entry in $path; do
+  [[ $path_entry == $homebrew_prefix/bin ]] && (( ++homebrew_count ))
+  [[ $path_entry == $late_prefix/bin ]] && (( ++late_count ))
+done
+(( homebrew_count == 1 )) ||
+  fail 'the final startup phase must remove duplicate integration PATH entries'
+(( late_count == 1 )) ||
+  fail 'the final startup phase must preserve unique integration PATH entries'
 
 print -r -- 'path-order checks passed'

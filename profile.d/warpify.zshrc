@@ -3,7 +3,9 @@ function {
   # Keep Warp's normal rc-sourced signal for already-compatible shells.
   (( WARP_COMPAT )) && {
     [[ "$-" == *i* ]] && {
-      printf '\033P$f{"hook": "SourcedRcFileForWarp", "value": { "shell": "zsh", "uname": "Linux" }}\234'
+      local warp_uname
+      warp_uname=$(command uname -s 2>/dev/null) || warp_uname=$OSTYPE
+      printf '\033P$f{"hook": "SourcedRcFileForWarp", "value": { "shell": "zsh", "uname": "%s" }}\234' "$warp_uname"
       unsetopt correct correct_all
     }
   }
