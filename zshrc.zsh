@@ -806,7 +806,7 @@ setopt auto_cd auto_pushd cdable_vars cd_silent pushd_ignore_dups pushd_silent
 # Completion
 setopt always_to_end complete_in_word glob_complete no_list_beep
 # Expansion and Globbing
-setopt bad_pattern brace_ccl case_paths extended_glob glob_star_short hist_subst_pattern magic_equal_subst numeric_glob_sort rematch_pcre
+setopt bad_pattern brace_ccl case_paths extended_glob glob_star_short hist_subst_pattern magic_equal_subst numeric_glob_sort
 # History
 setopt extended_history hist_fcntl_lock hist_find_no_dups hist_ignore_space hist_lex_words hist_no_store hist_reduce_blanks inc_append_history_time
 # Initialization
@@ -848,7 +848,6 @@ zmodload zsh/attr
 zmodload zsh/datetime
 zmodload zsh/mathfunc
 zmodload zsh/param/private
-zmodload zsh/pcre
 zmodload zsh/regex
 zmodload -F zsh/stat b:zstat
 
