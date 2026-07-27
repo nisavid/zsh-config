@@ -4,6 +4,7 @@ emulate -L zsh
 setopt errexit nounset pipefail
 
 readonly repo_root=${0:A:h:h}
+readonly zsh_bin=${commands[zsh]:A}
 tmpdir=$(mktemp -d)
 readonly tmpdir
 trap 'rm -rf -- $tmpdir' EXIT
@@ -11,6 +12,11 @@ trap 'rm -rf -- $tmpdir' EXIT
 function fail {
   print -ru2 -- "startup-matrix test failed: $1"
   return 1
+}
+
+function fixture_git {
+  env GIT_CONFIG_COUNT=0 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    git "$@"
 }
 
 function count_entry {
@@ -28,6 +34,7 @@ fixture_home=$tmpdir/home
 fixture_config=$fixture_home/.config
 fixture_zdotdir=$fixture_config/zsh
 fixture_bin=$tmpdir/bin
+fixture_fpath=$tmpdir/fpath
 homebrew_prefix=$fixture_home/homebrew
 shim_dir=$fixture_home/.local/lib/secret-exec/bin
 local_bin=$fixture_home/.local/bin
@@ -57,11 +64,16 @@ homebrew_bin=$homebrew_prefix/bin
 homebrew_sbin=$homebrew_prefix/sbin
 
 mkdir -p -- \
-  $fixture_config/environment.d $fixture_zdotdir $fixture_bin \
+  $fixture_config/environment.d $fixture_zdotdir $fixture_bin $fixture_fpath \
   $shim_dir $lmstudio_bin $kde_bin $krew_bin \
   $orb_bin $orb_completions $vite_bin $bun_bin $pnpm_bin \
   $cargo_bin $go_bin $pyenv_bin $zi_bin \
   $zi_polaris_bin $zi_polaris_sbin $rustup_bin $homebrew_bin $homebrew_sbin
+
+print -rl -- \
+  'function compdef { : }' \
+  'typeset -g ZI_TEST_COMPINIT_RAN=1' \
+  >$fixture_fpath/compinit
 
 ln -s -- $repo_root/zshenv.zsh $fixture_home/.zshenv
 ln -s -- $repo_root/zprofile.zsh $fixture_zdotdir/zprofile.zsh
@@ -82,14 +94,18 @@ print -rl -- \
   "PATH=\$PATH:$homebrew_bin:/usr/bin::/usr/bin" \
   >$fixture_config/environment.d/00-fixture.conf
 
-print -rl -- '#!/usr/bin/env zsh' 'exit 0' >$shim_dir/k9s
-print -rl -- '#!/usr/bin/env zsh' 'exit 0' >$homebrew_bin/k9s
+print -rl -- "#!$zsh_bin" 'exit 0' >$shim_dir/k9s
+print -rl -- "#!$zsh_bin" 'exit 0' >$homebrew_bin/k9s
+print -rl -- \
+  "#!$zsh_bin" \
+  "print -r -- ${(q)fixture_home}/fixture-man:${(q)fixture_home}/fixture-man-extra" \
+  >$fixture_bin/manpath
 fnm_multishell_bin=$fixture_home/.local/state/fnm_multishell/bin
 fnm_refreshed_bin=$fixture_home/.local/state/fnm_multishell_refreshed/bin
 fnm_partial_bin=$fixture_home/.local/state/fnm-partial/bin
 mkdir -p -- $fnm_multishell_bin $fnm_refreshed_bin $fnm_partial_bin
 print -rl -- \
-  '#!/usr/bin/env zsh' \
+  "#!$zsh_bin" \
   'function print_valid_env {' \
   '  local fnm_dir=${1:-$HOME/.local/share/fnm}' \
   '  local multishell=${FNM_MULTISHELL_VALUE:-$HOME/.local/state/fnm_multishell}' \
@@ -147,7 +163,7 @@ print -rl -- \
   '  (*) print_valid_env ;;' \
   'esac' \
   >$fixture_bin/fnm
-chmod +x $shim_dir/k9s $homebrew_bin/k9s $fixture_bin/fnm
+chmod +x $shim_dir/k9s $homebrew_bin/k9s $fixture_bin/fnm $fixture_bin/manpath
 
 # Match OrbStack's real, non-idempotent initializer. The startup contract must
 # never source this mixed PATH/fpath bundle.
@@ -163,7 +179,7 @@ print -rl -- \
   'export VP_HOME="$HOME/.vite-plus"' \
   'export PATH="$VP_HOME/bin:$PATH"' \
   'vp() { command vp "$@"; }' \
-  'if [ -n "$ZSH_VERSION" ] && type compdef >/dev/null 2>&1; then' \
+  'if [ -n "$ZSH_VERSION" ] && [ "${ZI_TEST_COMPINIT_RAN:-0}" = 1 ] && type compdef >/dev/null 2>&1; then' \
   '  typeset -g VITE_COMPLETION_LOADED=1' \
   'fi' \
   '[[ ${VITE_TEST_FAIL:-0} == 1 ]] && return 19' \
@@ -173,22 +189,29 @@ print -rl -- \
   "typeset -gA ZI=( PLUGINS_DIR ${(q)zi_home}/plugins )" \
   'function zi {' \
   '  local argument candidate condition atinit atload has id_as pick plugin_dir' \
-  '  integer defer=0' \
+  '  integer completion_init=0 defer=0' \
   '  for argument in "$@"; do' \
   '    case $argument in' \
-  '      (wait|wait2) defer=1 ;;' \
+  '      (wait|wait2|wait:*) defer=1 ;;' \
   '      (atinit:*) atinit=${argument#atinit:} ;;' \
   '      (atload:*) atload=${argument#atload:} ;;' \
+  '      (atload=+*) atload=${argument#atload=+} ;;' \
   '      (has:*) has=${argument#has:} ;;' \
   '      (if:*) condition=${argument#if:} ;;' \
   '      (id-as:*) id_as=${argument#id-as:} ;;' \
   '      (pick:*) pick=${argument#pick:} ;;' \
+  '      (system-completions) completion_init=1 ;;' \
   '      (/*) candidate=$argument ;;' \
   '    esac' \
   '  done' \
   '  [[ -z $has || $has != ${ZI_TEST_FORCE_MISSING_COMMAND:-} ]] || return 0' \
   '  [[ -z $has ]] || (( $+commands[$has] )) || return 0' \
   '  [[ -z $condition ]] || eval "$condition" || return 0' \
+  '  [[ $id_as == completion-init ]] && completion_init=1' \
+  '  if (( defer && completion_init )); then' \
+  '    typeset -g ZI_TEST_WAIT1_ATLOAD=$atload' \
+  '    return 0' \
+  '  fi' \
   '  if (( defer )) && [[ $id_as == (fnm|vite-plus) ]]; then' \
   '    typeset -g ZI_TEST_DEFERRED_CANDIDATE=$candidate' \
   '    typeset -g ZI_TEST_DEFERRED_ATLOAD=$atload' \
@@ -204,12 +227,21 @@ print -rl -- \
   '  [[ -z $atload ]] || eval "$atload"' \
   '}' \
   'function zi_test_run_deferred {' \
+  '  if [[ -n ${ZI_TEST_WAIT1_ATLOAD:-} ]]; then' \
+  '    eval "$ZI_TEST_WAIT1_ATLOAD"' \
+  '    unset ZI_TEST_WAIT1_ATLOAD' \
+  '  fi' \
   '  [[ -z ${ZI_TEST_DEFERRED_CANDIDATE:-} || ! -r $ZI_TEST_DEFERRED_CANDIDATE ]] ||' \
   '    source "$ZI_TEST_DEFERRED_CANDIDATE"' \
   '  [[ -z ${ZI_TEST_DEFERRED_ATLOAD:-} ]] || eval "$ZI_TEST_DEFERRED_ATLOAD"' \
   '  unset ZI_TEST_DEFERRED_CANDIDATE ZI_TEST_DEFERRED_ATLOAD' \
   '}' \
-  'function zicompinit_fast { autoload -Uz compinit; compinit -D }' \
+  'unfunction compdef 2>/dev/null' \
+  'unset _comps 2>/dev/null' \
+  'function zicompinit_fast {' \
+  '  function compdef { : }' \
+  '  typeset -g ZI_TEST_COMPINIT_RAN=1' \
+  '}' \
   'function zicdreplay { : }' \
   >$zi_bin/zi.zsh
 
@@ -229,7 +261,7 @@ function shell_probe {
       TERM=dumb \
       TERM_PROGRAM=CodexTest \
       WARP_COMPAT=1 \
-      /bin/zsh $shell_flags \
+      $zsh_bin $shell_flags \
       'local entry
      (( $+functions[zi_test_run_deferred] )) && zi_test_run_deferred
      integer empty_count=0 shim_count=0 system_count=0 orb_count=0
@@ -307,6 +339,9 @@ function expect_probe {
     fail "$label has the wrong Vite+ completion availability"
   grep -Fxq 'DEFERRED_HELPERS=0:0' $stdout_file ||
     fail "$label leaked deferred startup helpers into the shell namespace"
+  if grep -Fq 'command not found: compdef' $stderr_file; then
+    fail "$label inherited ambient completion state before fixture compinit"
+  fi
   grep -Fxq "PNPM_HOME=$pnpm_home" $stdout_file ||
     fail "$label must export PNPM_HOME"
   grep -Fxq "KREW_ROOT=$krew_root" $stdout_file ||
@@ -342,6 +377,8 @@ expect_probe interactive-login -lic 1
   fail 'interactive startup wrote a plugin cache into the shell working directory'
 grep -Fq 'export -aT MANPATH' $zi_home/plugins/manpath/init.zsh ||
   fail 'interactive startup did not generate the MANPATH cache in its owned plugin directory'
+grep -Fq "$fixture_home/fixture-man" $zi_home/plugins/manpath/init.zsh ||
+  fail 'interactive startup did not use the fixture-owned manpath command'
 
 vite_failure_stdout=$tmpdir/vite-failure.stdout
 vite_failure_stderr=$tmpdir/vite-failure.stderr
@@ -353,7 +390,7 @@ env -i \
   TERM_PROGRAM=CodexTest \
   VITE_TEST_FAIL=1 \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'zi_test_run_deferred
    print -r -- "PATH_FIRST=$path[1]"' \
   >$vite_failure_stdout 2>$vite_failure_stderr ||
@@ -372,7 +409,7 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'zi_test_run_deferred
    print -r -- "$path[1]"
    print -r -- "DEFERRED_HELPERS=${+functions[__zshrc_repair_deferred_path]}:${+functions[__zshrc_init_fnm]}"
@@ -395,7 +432,7 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'local deferred_candidate=$ZI_TEST_DEFERRED_CANDIDATE
    local deferred_atload=$ZI_TEST_DEFERRED_ATLOAD
    zi_test_run_deferred
@@ -446,7 +483,7 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'zi_test_run_deferred
    print -r -- "PATH_FIRST=$path[1]"
    print -r -- "FNM_DIR=$FNM_DIR"' \
@@ -468,7 +505,7 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'setopt SH_WORD_SPLIT KSH_ARRAYS
    zi_test_run_deferred
    if [[ -o SH_WORD_SPLIT && -o KSH_ARRAYS ]]; then
@@ -516,7 +553,7 @@ do
     TERM=dumb \
     TERM_PROGRAM=CodexTest \
     WARP_COMPAT=1 \
-    /bin/zsh -ic \
+    $zsh_bin -ic \
     'case $FNM_COLLISION_MODE in
        (readonly) readonly FNM_DIR=before ;;
        (non-scalar) typeset -ga FNM_DIR=( before ) ;;
@@ -685,7 +722,7 @@ do
     TERM=dumb \
     TERM_PROGRAM=CodexTest \
     WARP_COMPAT=1 \
-    /bin/zsh -ic \
+    $zsh_bin -ic \
     'zi_test_run_deferred
      integer multishell_count=0 partial_count=0
      local entry
@@ -736,13 +773,14 @@ print -rl -- \
 partial_zi_stdout=$tmpdir/partial-zi.stdout
 partial_zi_stderr=$tmpdir/partial-zi.stderr
 env -i \
+  FPATH=$fixture_fpath \
   HOME=$fixture_home \
   MANPATH=/fixture/custom/man \
   PATH=$initial_path \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'print -r -- "PARTIAL_ZI_CALLED=${PARTIAL_ZI_CALLED:-0}"
    print -r -- "ZI_FUNCTION=${+functions[zi]}"
    print -r -- "VP_FUNCTION=${+functions[vp]}"
@@ -773,7 +811,7 @@ env -i \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
   ZI_TEST_FORCE_MISSING_COMMAND=manpath \
-  /bin/zsh -ic 'print -r -- "MANPATH=${MANPATH-unset}"' \
+  $zsh_bin -ic 'print -r -- "MANPATH=${MANPATH-unset}"' \
   >$no_manpath_stdout 2>$tmpdir/no-manpath.stderr ||
   fail 'successful Zi startup without manpath made the shell unusable'
 grep -Fxq 'MANPATH=/fixture/custom/man' $no_manpath_stdout ||
@@ -788,7 +826,7 @@ function expect_platform_defaults {
   mkdir -p -- $platform_home/.local/share/pnpm/bin
   local output
   output=$(
-    env -i HOME=$platform_home PATH=/usr/bin:/bin /bin/zsh -f -c \
+    env -i HOME=$platform_home PATH=/usr/bin:/bin $zsh_bin -f -c \
       'source "$1" test "$2"; print -r -- "$PNPM_HOME"' \
       -- $repo_root/startup.zsh $platform
   )
@@ -807,7 +845,7 @@ env -i \
   HOME=$duplicate_home \
   PATH=/usr/bin:/bin \
   GOBIN=$duplicate_home/.local/bin \
-  /bin/zsh -fic \
+  $zsh_bin -fic \
   'source "$1" test "$OSTYPE"' \
   -- $repo_root/startup.zsh \
   2>$duplicate_log ||
@@ -822,7 +860,7 @@ canonical_log=$tmpdir/canonical-duplicate.stderr
 env -i \
   HOME=$canonical_home \
   PATH=$canonical_home/real-bin:$canonical_home/link-bin:/usr/bin:/bin \
-  /bin/zsh -fic \
+  $zsh_bin -fic \
   'source "$1" test "$OSTYPE"' \
   -- $repo_root/startup.zsh \
   2>$canonical_log ||
@@ -840,7 +878,7 @@ launcher_path=$(
   env -i \
     HOME=$launcher_home \
     PATH=/usr/local/bin:/usr/bin:/bin:/usr/bin \
-    /bin/zsh -f -c \
+    $zsh_bin -f -c \
     'source "$1" launcher "$OSTYPE"; print -r -- "$PATH"' \
     -- $repo_root/startup.zsh
 ) || fail 'launcher startup failed while checking the core PATH'
@@ -868,7 +906,7 @@ env -i \
   HOME=$list_home \
   PATH=/usr/bin:/bin \
   INFOPATH=$list_real:$list_real::$list_link: \
-  /bin/zsh -fic \
+  $zsh_bin -fic \
   'fpath=(
      "$HOME/.orbstack/shell/completions/zsh"
      "$HOME/.orbstack/shell/completions/zsh"
@@ -910,7 +948,7 @@ env -i \
   HOME=$fixture_home \
   PATH=$arithmetic_path:/usr/bin:/bin \
   BIN_HOME=$arithmetic_path \
-  /bin/zsh -f -c 'source "$1" zshenv "$OSTYPE"' -- $repo_root/startup.zsh \
+  $zsh_bin -f -c 'source "$1" zshenv "$OSTYPE"' -- $repo_root/startup.zsh \
   2>$arithmetic_path_log ||
   fail 'managed PATH handling rejected a literal arithmetic-subscript token'
 if grep -Fq ARITHMETIC_PATH_SUBSCRIPT_EXECUTED $arithmetic_path_log; then
@@ -923,7 +961,7 @@ arithmetic_fpath_log=$tmpdir/arithmetic-fpath.stderr
 env -i \
   HOME=$arithmetic_home \
   PATH=/usr/bin:/bin \
-  /bin/zsh -f -c \
+  $zsh_bin -f -c \
   'fpath=( "$HOME/.orbstack/shell/completions/zsh" "$HOME/.orbstack/shell/completions/zsh" )
    source "$1" zshrc-final "$OSTYPE"' \
   -- $repo_root/startup.zsh \
@@ -941,7 +979,7 @@ pattern_log=$tmpdir/pattern-paths.stderr
 env -i \
   HOME=$fixture_home \
   PATH=$pattern_home/globx:$pattern_home/'glob*':/usr/bin:/bin \
-  /bin/zsh -fic \
+  $zsh_bin -fic \
   'fpath=( "$2/globx" "$2/glob*" )
    source "$1" zshrc-final "$OSTYPE"' \
   -- $repo_root/startup.zsh $pattern_home \
@@ -966,7 +1004,7 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic ':' \
+  $zsh_bin -ic ':' \
   2>$missing_interactive_log ||
   missing_interactive_status=$?
 mv -- $tmpdir/startup.zsh.saved $fixture_zdotdir/startup.zsh
@@ -987,7 +1025,7 @@ ln -s -- $repo_root/environment.zsh $missing_zdotdir/environment.zsh
 ln -s -- $repo_root/profiles.zsh $missing_zdotdir/profiles.zsh
 ln -s -- $repo_root/startup.zsh $missing_zdotdir/startup.zsh
 missing_log=$tmpdir/missing-login-policy.stderr
-env -i HOME=$missing_home PATH=/usr/bin:/bin /bin/zsh -lc ':' 2>$missing_log ||
+env -i HOME=$missing_home PATH=/usr/bin:/bin $zsh_bin -lc ':' 2>$missing_log ||
   fail 'a missing login policy must preserve a usable shell'
 grep -Fq 'zsh startup: required login policy is missing:' $missing_log ||
   fail 'a missing login policy must surface degraded startup'
@@ -995,7 +1033,7 @@ grep -Fq 'zsh startup: required login policy is missing:' $missing_log ||
 update_origin=$tmpdir/update-origin
 cp -R -- $repo_root $update_origin
 rm -rf -- $update_origin/.git
-git -C $update_origin init --quiet --initial-branch=main
+fixture_git -C $update_origin init --quiet --initial-branch=main
 mkdir -p -- \
   $update_origin/profile.d \
   $update_origin/zshrc.d \
@@ -1005,11 +1043,11 @@ print -r -- 'typeset -g TRACKED_PROFILE_SOURCE=installed' \
   >$fixture_zdotdir/profile.d/tracked.zshrc
 print -r -- 'typeset -g MODIFIED_PROFILE_SOURCE=installed' \
   >$fixture_zdotdir/profile.d/modified.zshrc
-git -C $fixture_zdotdir init --quiet --initial-branch=main
-git -C $fixture_zdotdir add -- \
+fixture_git -C $fixture_zdotdir init --quiet --initial-branch=main
+fixture_git -C $fixture_zdotdir add -- \
   profile.d/modified.zshrc \
   profile.d/tracked.zshrc
-git -C $fixture_zdotdir \
+fixture_git -C $fixture_zdotdir \
   -c user.name='Zsh Config Test' \
   -c user.email='zsh-config-test@example.invalid' \
   commit --quiet -m 'test: track installed profile'
@@ -1065,26 +1103,29 @@ cp -a -- \
   $update_origin/zshrc.d/split-dangling.local.zsh
 touch -t 203001010000 $update_origin/profile.d/host-local.zshrc
 touch -t 202001010000 $fixture_zdotdir/profile.d/host-local.zshrc
-git -C $update_origin add -- \
+fixture_git -C $update_origin add -- \
   profile.d/dangling.zshrc \
   profile.d/host-local.zshrc \
   profile.d/legacy-match.disabled \
   profile.d/legacy-match.zshrc \
   profile.d/modified.zshrc \
   profile.d/tracked.zshrc
-git -C $update_origin \
+fixture_git -C $update_origin \
   -c user.name='Zsh Config Test' \
   -c user.email='zsh-config-test@example.invalid' \
   commit --quiet -m 'test: create update origin'
 update_log=$tmpdir/profile-update.stderr
 env -i \
+  GIT_CONFIG_COUNT=0 \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 \
   HOME=$fixture_home \
   PATH=$initial_path \
   ZDOTDIR_ORIGIN=$update_origin \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic 'zsh-config-update' \
+  $zsh_bin -ic 'zsh-config-update' \
   2>$update_log ||
   fail 'self-update failed while preserving a host-local profile'
 grep -Fxq 'typeset -g UPDATE_PROFILE_SOURCE=local' \
@@ -1110,7 +1151,7 @@ grep -Fxq 'typeset -g SOLO_LEGACY_VERSION=1' \
 [[ ! -e $fixture_zdotdir/profile.d/solo.zshrc ]] ||
   fail 'self-update made an unmatched legacy profile indistinguishable from a regular profile'
 legacy_match_output=$(
-  env -i ZDOTDIR=$fixture_zdotdir /bin/zsh -f -c \
+  env -i ZDOTDIR=$fixture_zdotdir $zsh_bin -f -c \
     'source "$1" zshrc; print -r -- "${LEGACY_MATCH_UPSTREAM:-0}:${LEGACY_MATCH_LOCAL:-0}:${NEW_LOCAL_PROFILE:-0}:${LEGACY_MATCH_ORDER:-}"' \
     -- $fixture_zdotdir/profiles.zsh
 ) || fail 'migrated split and host-local profiles did not load'
@@ -1132,13 +1173,16 @@ grep -Fxq 'typeset -g SPLIT_DANGLING_LEGACY_PROFILE=1' \
   fail 'self-update did not preserve legacy contents beside a dangling split profile'
 
 env -i \
+  GIT_CONFIG_COUNT=0 \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 \
   HOME=$fixture_home \
   PATH=$initial_path \
   ZDOTDIR_ORIGIN=$update_origin \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic 'zsh-config-update' \
+  $zsh_bin -ic 'zsh-config-update' \
   >$tmpdir/profile-update-second.stdout \
   2>$tmpdir/profile-update-second.stderr ||
   fail 'second self-update failed while preserving migrated local profiles'
@@ -1162,13 +1206,16 @@ print -r -- 'typeset -g SOLO_LEGACY_VERSION=2' \
 print -r -- 'typeset -g LEGACY_MATCH_LOCAL=0' \
   >$fixture_zdotdir/profile.d/legacy-match.legacy-9.local.zshrc
 env -i \
+  GIT_CONFIG_COUNT=0 \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 \
   HOME=$fixture_home \
   PATH=$initial_path \
   ZDOTDIR_ORIGIN=$update_origin \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic 'zsh-config-update' \
+  $zsh_bin -ic 'zsh-config-update' \
   >$tmpdir/profile-update-third.stdout \
   2>$tmpdir/profile-update-third.stderr ||
   fail 'third self-update failed after the legacy profile changed'
@@ -1187,14 +1234,14 @@ grep -Fxq 'typeset -g SOLO_LEGACY_VERSION=2' \
   $fixture_zdotdir/profile.d/solo.legacy.local.zshrc ||
   fail 'self-update did not replace an unmatched migrated legacy version'
 legacy_match_output=$(
-  env -i ZDOTDIR=$fixture_zdotdir /bin/zsh -f -c \
+  env -i ZDOTDIR=$fixture_zdotdir $zsh_bin -f -c \
     'source "$1" zshrc; print -r -- "${LEGACY_MATCH_UPSTREAM:-0}:${LEGACY_MATCH_LOCAL:-0}:${NEW_LOCAL_PROFILE:-0}:${LEGACY_MATCH_ORDER:-}"' \
     -- $fixture_zdotdir/profiles.zsh
 ) || fail 'updated legacy and host-local profiles did not load'
 [[ $legacy_match_output == 1:2:1:upstream,legacy-v2,new-local ]] ||
   fail 'an obsolete migrated legacy version still executed after the update'
 solo_legacy_output=$(
-  env -i ZDOTDIR=$fixture_zdotdir /bin/zsh -f -c \
+  env -i ZDOTDIR=$fixture_zdotdir $zsh_bin -f -c \
     'source "$1" zshrc; print -r -- "${SOLO_LEGACY_VERSION:-0}"' \
     -- $fixture_zdotdir/profiles.zsh
 ) || fail 'updated unmatched legacy profile did not load'
@@ -1212,13 +1259,16 @@ mkdir -p -- $update_origin/zshrc.d
 print -r -- 'typeset -g ORIGIN_SYMLINK_LEGACY_LOADED=1' \
   >$update_origin/zshrc.d/origin-symlink.local.zsh
 env -i \
+  GIT_CONFIG_COUNT=0 \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 \
   HOME=$fixture_home \
   PATH=$initial_path \
   ZDOTDIR_ORIGIN=$update_origin \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic \
+  $zsh_bin -ic \
   'zsh-config-update
    print -r -- "MIGRATION_PARAMETER_LEAKS=${+parameters[legacy_profile]}:${+parameters[legacy_name]}:${+parameters[existing_migrations]}"' \
   >$tmpdir/profile-update-fourth.stdout \
@@ -1236,21 +1286,21 @@ env -i \
   fail 'origin-only migration cleanup leaked function parameters'
 }
 legacy_match_output=$(
-  env -i ZDOTDIR=$fixture_zdotdir /bin/zsh -f -c \
+  env -i ZDOTDIR=$fixture_zdotdir $zsh_bin -f -c \
     'source "$1" zshrc; print -r -- "${LEGACY_MATCH_UPSTREAM:-0}:${LEGACY_MATCH_LOCAL:-0}:${NEW_LOCAL_PROFILE:-0}:${LEGACY_MATCH_ORDER:-}"' \
     -- $fixture_zdotdir/profiles.zsh
 ) || fail 'fourth-update legacy and host-local profiles did not load'
 [[ $legacy_match_output == 1:2:1:upstream,legacy-v2,new-local ]] ||
   fail 'fourth update executed an obsolete origin-side legacy version'
 solo_legacy_output=$(
-  env -i ZDOTDIR=$fixture_zdotdir /bin/zsh -f -c \
+  env -i ZDOTDIR=$fixture_zdotdir $zsh_bin -f -c \
     'source "$1" zshrc; print -r -- "${SOLO_LEGACY_VERSION:-0}"' \
     -- $fixture_zdotdir/profiles.zsh
 ) || fail 'fourth-update unmatched legacy profile did not load'
 [[ $solo_legacy_output == 2 ]] ||
   fail 'fourth update did not preserve exactly one current unmatched migration'
 origin_symlink_output=$(
-  env -i ZDOTDIR=$fixture_zdotdir /bin/zsh -f -c \
+  env -i ZDOTDIR=$fixture_zdotdir $zsh_bin -f -c \
     'source "$1" zshrc
      print -r -- "${ORIGIN_SYMLINK_LEGACY_LOADED:-0}:${READABLE_MIGRATION_SYMLINK_LOADED:-0}"' \
     -- $fixture_zdotdir/profiles.zsh
@@ -1289,7 +1339,7 @@ cp -- $no_cmp_zdotdir/zshrc.d/near-duplicate.local.zsh \
 print -rl -- '(( ++NO_CMP_NEAR_DUPLICATE_LOADS ))' '' \
   >$no_cmp_zdotdir/profile.d/near-duplicate.zshrc
 no_cmp_profile_loads=$(
-  env -i PATH=/missing ZDOTDIR=$no_cmp_zdotdir /bin/zsh -f -c \
+  env -i PATH=/missing ZDOTDIR=$no_cmp_zdotdir $zsh_bin -f -c \
     'typeset -gi NO_CMP_PROFILE_LOADS=0
      typeset -gi NO_CMP_COLLISION_LOADS=0
      typeset -gi NO_CMP_DUPLICATE_LOADS=0
@@ -1306,8 +1356,11 @@ cp -R -- $repo_root $empty_update_zdotdir
 rm -rf -- $empty_update_zdotdir/.git
 mkdir -p -- $empty_update_zdotdir/profile.d
 rm -f -- $empty_update_zdotdir/profile.d/*(N)
-git -C $empty_update_zdotdir init --quiet --initial-branch=main
+fixture_git -C $empty_update_zdotdir init --quiet --initial-branch=main
 env -i \
+  GIT_CONFIG_COUNT=0 \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 \
   HOME=$fixture_home \
   PATH=$initial_path \
   ZDOTDIR=$empty_update_zdotdir \
@@ -1315,18 +1368,21 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic 'zsh-config-update' \
+  $zsh_bin -ic 'zsh-config-update' \
   2>$tmpdir/empty-profile-update.stderr ||
   fail 'self-update failed when the local profile directory was empty'
 [[ -r $empty_update_zdotdir/profile.d/host-local.zshrc ]] ||
   fail 'self-update did not restore checkout profiles over an empty local profile directory'
 
-print -rl -- '#!/bin/zsh -f' 'exit 17' >$fixture_bin/mktemp
+print -rl -- "#!$zsh_bin" 'exit 17' >$fixture_bin/mktemp
 chmod +x $fixture_bin/mktemp
 print -r -- 'preserve-on-mktemp-failure' \
   >$empty_update_zdotdir/mktemp-failure-marker
 integer mktemp_failure_status=0
 env -i \
+  GIT_CONFIG_COUNT=0 \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 \
   HOME=$fixture_home \
   PATH=$initial_path \
   ZDOTDIR=$empty_update_zdotdir \
@@ -1334,7 +1390,7 @@ env -i \
   TERM=dumb \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
-  /bin/zsh -ic 'zsh-config-update' \
+  $zsh_bin -ic 'zsh-config-update' \
   2>$tmpdir/mktemp-failure-update.stderr ||
   mktemp_failure_status=$?
 (( mktemp_failure_status != 0 )) ||

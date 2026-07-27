@@ -4,6 +4,7 @@ emulate -L zsh
 setopt errexit nounset pipefail
 
 readonly repo_root=${0:A:h:h}
+readonly zsh_bin=${commands[zsh]:A}
 tmpdir=$(mktemp -d)
 readonly tmpdir
 trap 'rm -rf -- $tmpdir' EXIT
@@ -164,15 +165,22 @@ source $repo_root/profiles.zsh zshrc
 (( EDGE_LOCAL_MIGRATION_LOAD_COUNT == 1 )) ||
   fail 'a migrated profile name ending in .local executed more than once'
 
-git -C $repo_root check-ignore -q profile.d/example.enabled ||
+ignore_repo=$tmpdir/ignore-repo
+mkdir -p -- $ignore_repo/profile.d
+env GIT_CONFIG_COUNT=0 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+  git -C $ignore_repo init --quiet
+cp -- $repo_root/.gitignore $ignore_repo/.gitignore
+env GIT_CONFIG_COUNT=0 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+  git -C $ignore_repo check-ignore -q profile.d/example.enabled ||
   fail 'host-local profile enable markers are not ignored'
-git -C $repo_root check-ignore -q profile.d/example.local.zshrc ||
+env GIT_CONFIG_COUNT=0 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+  git -C $ignore_repo check-ignore -q profile.d/example.local.zshrc ||
   fail 'migrated host-local profile fragments are not ignored'
 
 openclaw_homebrew_output=$(
   env -i \
     HOMEBREW_PREFIX=/opt/custom-homebrew \
-    /bin/zsh -f -c \
+    $zsh_bin -f -c \
     'setopt extendedglob; source "$1"; print -r -- "$HOMEBREW_PREFIX:$HOMEBREW_CELLAR:$HOMEBREW_REPOSITORY"' \
     -- $repo_root/profile.d/openclaw.zshenv
 ) || fail 'the OpenClaw profile rejected an explicit Homebrew prefix'
@@ -183,7 +191,7 @@ openclaw_homebrew_output=$(
 if [[ $OSTYPE == darwin* ]]; then
   node_fixture_bin=$tmpdir/node-fixture-bin
   mkdir -p -- $node_fixture_bin
-  print -rl -- '#!/bin/zsh -f' 'print -r -- 4294967296' \
+  print -rl -- "#!$zsh_bin" 'print -r -- 4294967296' \
     >$node_fixture_bin/sysctl
   chmod +x $node_fixture_bin/sysctl
   node_options_output=$(
@@ -191,7 +199,7 @@ if [[ $OSTYPE == darwin* ]]; then
       HOME=$tmpdir/node-home \
       PATH=$node_fixture_bin:/usr/bin:/bin \
       NODE_OPTIONS='--require "/tmp/a b.js" --max-old-space-size=999' \
-      /bin/zsh -f -c \
+      $zsh_bin -f -c \
       'source "$1"; print -r -- "$NODE_OPTIONS"' \
       -- $repo_root/profile.d/node-lowmem.zshenv
   ) || fail 'the low-memory Node profile failed with a quoted option value'
