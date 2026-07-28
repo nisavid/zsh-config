@@ -19,6 +19,39 @@ function fixture_git {
     git "$@"
 }
 
+function copy_tracked_checkout {
+  local source=$1
+  local destination=$2
+  local manifest=$tmpdir/tracked-checkout-paths
+  local entry
+  local indexed_mode
+  local relative_path
+
+  fixture_git -c safe.directory="$source" \
+    -C "$source" ls-files -s -z >"$manifest" || return
+  mkdir -p -- "$destination" || return
+  while IFS= read -r -d '' entry; do
+    indexed_mode=${entry%% *}
+    relative_path=${entry#*$'\t'}
+    case $indexed_mode in
+      100644|100755)
+        [[ -f $source/$relative_path && ! -L $source/$relative_path ]] ||
+          continue
+        ;;
+      120000)
+        [[ -L $source/$relative_path ]] || continue
+        ;;
+      *)
+        fail "unsupported tracked fixture mode: $indexed_mode"
+        return 1
+        ;;
+    esac
+    mkdir -p -- "$destination/${relative_path:h}" || return
+    cp -a -- "$source/$relative_path" \
+      "$destination/$relative_path" || return
+  done <"$manifest"
+}
+
 function count_entry {
   local needle=$1
   shift
@@ -29,6 +62,67 @@ function count_entry {
   done
   REPLY=$count
 }
+
+tracked_copy_source=$tmpdir/tracked-copy-source
+tracked_copy_destination=$tmpdir/tracked-copy-destination
+mkdir -p -- "$tracked_copy_source"
+fixture_git -C "$tracked_copy_source" init --quiet --initial-branch=main
+print -r -- 'ignored.local' >"$tracked_copy_source/.gitignore"
+print -r -- indexed >"$tracked_copy_source/tracked"
+print -r -- deleted >"$tracked_copy_source/deleted"
+print -r -- collision >"$tracked_copy_source/collision"
+ln -s -- missing-target "$tracked_copy_source/dangling"
+print -r -- ignored >"$tracked_copy_source/ignored.local"
+fixture_git -C "$tracked_copy_source" add -- \
+  .gitignore collision dangling deleted tracked
+print -r -- working-tree >"$tracked_copy_source/tracked"
+print -r -- untracked >"$tracked_copy_source/untracked.local"
+rm -f -- "$tracked_copy_source/deleted" "$tracked_copy_source/collision"
+mkdir -p -- "$tracked_copy_source/collision"
+print -r -- operator-secret >"$tracked_copy_source/collision/untracked.local"
+copy_tracked_checkout "$tracked_copy_source" "$tracked_copy_destination" ||
+  fail 'could not construct the tracked-copy regression fixture'
+[[ -r $tracked_copy_destination/tracked ]] ||
+  fail 'tracked-checkout copying omitted a tracked working-tree file'
+[[ $(<$tracked_copy_destination/tracked) == working-tree ]] ||
+  fail 'tracked-checkout copying ignored modified tracked content'
+[[ ! -e $tracked_copy_destination/ignored.local ]] ||
+  fail 'tracked-checkout copying included an ignored working-tree file'
+[[ ! -e $tracked_copy_destination/untracked.local ]] ||
+  fail 'tracked-checkout copying included an untracked working-tree file'
+[[ ! -e $tracked_copy_destination/deleted ]] ||
+  fail 'tracked-checkout copying recreated a deleted tracked file'
+[[ ! -e $tracked_copy_destination/collision ]] ||
+  fail 'tracked-checkout copying included a tracked-file directory replacement'
+[[ -L $tracked_copy_destination/dangling ]] &&
+  [[ $(readlink -- "$tracked_copy_destination/dangling") == missing-target ]] ||
+  fail 'tracked-checkout copying did not preserve a dangling tracked symlink'
+[[ ! -e $tracked_copy_destination/.git ]] ||
+  fail 'tracked-checkout copying included source Git metadata'
+
+forced_owner_destination=$tmpdir/forced-owner-destination
+GIT_TEST_ASSUME_DIFFERENT_OWNER=1 \
+  copy_tracked_checkout \
+    "$tracked_copy_source" "$forced_owner_destination" ||
+  fail 'tracked-checkout copying did not trust the exact source checkout'
+[[ $(<$forced_owner_destination/tracked) == working-tree ]] ||
+  fail 'forced-owner copying did not preserve modified tracked content'
+
+gitlink_destination=$tmpdir/gitlink-destination
+gitlink_log=$tmpdir/gitlink.log
+fixture_git -C "$tracked_copy_source" update-index \
+  --add --info-only \
+  --cacheinfo 160000,1111111111111111111111111111111111111111,gitlink
+mkdir -p -- "$tracked_copy_source/gitlink"
+print -r -- operator-secret >"$tracked_copy_source/gitlink/untracked.local"
+if copy_tracked_checkout \
+  "$tracked_copy_source" "$gitlink_destination" 2>"$gitlink_log"; then
+  fail 'tracked-checkout copying accepted an unsupported gitlink'
+fi
+grep -Fq 'unsupported tracked fixture mode: 160000' "$gitlink_log" ||
+  fail 'tracked-checkout copying did not report an unsupported gitlink'
+[[ ! -e $gitlink_destination/gitlink ]] ||
+  fail 'tracked-checkout copying imported an unsupported gitlink directory'
 
 fixture_home=$tmpdir/home
 fixture_config=$fixture_home/.config
@@ -1031,8 +1125,8 @@ grep -Fq 'zsh startup: required login policy is missing:' $missing_log ||
   fail 'a missing login policy must surface degraded startup'
 
 update_origin=$tmpdir/update-origin
-cp -R -- $repo_root $update_origin
-rm -rf -- $update_origin/.git
+copy_tracked_checkout "$repo_root" "$update_origin" ||
+  fail 'could not construct the tracked update-origin fixture'
 fixture_git -C $update_origin init --quiet --initial-branch=main
 mkdir -p -- \
   $update_origin/profile.d \
@@ -1352,8 +1446,8 @@ no_cmp_profile_loads=$(
   fail 'missing cmp or migration-slot collisions selected the wrong profile'
 
 empty_update_zdotdir=$tmpdir/empty-update-target
-cp -R -- $repo_root $empty_update_zdotdir
-rm -rf -- $empty_update_zdotdir/.git
+copy_tracked_checkout "$repo_root" "$empty_update_zdotdir" ||
+  fail 'could not construct the tracked empty-update fixture'
 mkdir -p -- $empty_update_zdotdir/profile.d
 rm -f -- $empty_update_zdotdir/profile.d/*(N)
 fixture_git -C $empty_update_zdotdir init --quiet --initial-branch=main
