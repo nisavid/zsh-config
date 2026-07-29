@@ -333,16 +333,16 @@ ordered, host-relative toolchain paths. Reapplying the policy is idempotent:
 - inherited exact duplicates are removed while preserving the first effective
   entry;
 - unsafe empty PATH entries are removed;
-- canonically equivalent but textually distinct paths are reported
-  interactively without being rewritten; and
+- canonically equivalent existing directories are reduced to the first
+  effective textual entry; and
 - `fpath` and applicable colon-list environment variables receive the same
-  exact-duplicate checks. Empty entries with defined default-path semantics,
-  such as `MANPATH`, are preserved once.
+  exact and canonical normalization. Empty entries with defined default-path
+  semantics, such as `MANPATH`, are preserved once.
 
-Routine cleanup is silent in non-interactive shells. Interactive startup reports
-configuration defects and inherited duplication until their sources are fixed.
-A malformed required fragment or failed optional integration is rejected, but
-startup preserves a usable degraded shell for repair.
+Routine normalization is silent in every shell mode. Interactive startup still
+reports duplicate entries in the managed specification. A malformed required
+fragment or failed optional integration is rejected, but startup preserves a
+usable degraded shell for repair.
 
 OrbStack's generated initializer combines PATH and completion behavior and is
 not idempotent, so it is not sourced. The optional OrbStack bin directory is

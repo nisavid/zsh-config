@@ -22,4 +22,6 @@ function {
     (( ${+WARP_ENABLE_WAYLAND} || ${+WARP_IS_LOCAL_SHELL_SESSION} || ${+WARP_BOOTSTRAPPED} || ${+WARP_COMPAT} )) ||
       [[ ${TERM_PROGRAM-} == Warp ]]
   } && unsetopt correct correct_all
+
+  return 0
 }
