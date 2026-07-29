@@ -90,53 +90,40 @@ function {
     managed_paths+=( $candidate )
   done
 
-  local -A output_seen managed_input_count
+  local -A output_seen
   for candidate in $managed_paths; do
     output_seen[$candidate]=1
     new_path+=( $candidate )
   done
 
   local inherited_entry
-  integer managed_path_count
   for inherited_entry in "${path[@]}"; do
     if [[ -z $inherited_entry ]]; then
-      (( is_interactive )) &&
-        print -ru2 -- 'zsh startup: removed unsafe empty PATH entry'
       continue
     fi
     if [[ -n ${managed_seen[$inherited_entry]-} ]]; then
-      managed_path_count=${managed_input_count[$inherited_entry]:-0}
-      (( ++managed_path_count ))
-      managed_input_count[$inherited_entry]=$managed_path_count
-      if (( is_interactive && managed_path_count > 1 )); then
-        print -ru2 -- "zsh startup: removed exact duplicate PATH entry: $inherited_entry"
-      fi
       continue
     fi
     if [[ -n ${output_seen[$inherited_entry]-} ]]; then
-      (( is_interactive )) &&
-        print -ru2 -- "zsh startup: removed exact duplicate PATH entry: $inherited_entry"
       continue
     fi
     output_seen[$inherited_entry]=1
     new_path+=( $inherited_entry )
   done
 
-  if (( is_interactive )); then
-    local -A canonical_entries
-    local canonical_entry prior_entry
-    for inherited_entry in "${new_path[@]}"; do
-      [[ -d $inherited_entry ]] || continue
+  local -A canonical_entries
+  local -a canonical_output
+  local canonical_entry prior_entry
+  for inherited_entry in "${new_path[@]}"; do
+    if [[ -d $inherited_entry ]]; then
       canonical_entry=${inherited_entry:A}
       prior_entry=${canonical_entries[$canonical_entry]-}
-      if [[ -n $prior_entry && $prior_entry != $inherited_entry ]]; then
-        print -ru2 -- \
-          "zsh startup: canonically equivalent PATH entries: $prior_entry and $inherited_entry"
-      else
-        canonical_entries[$canonical_entry]=$inherited_entry
-      fi
-    done
-  fi
+      [[ -z $prior_entry || $prior_entry == $inherited_entry ]] || continue
+      canonical_entries[$canonical_entry]=$inherited_entry
+    fi
+    canonical_output+=( $inherited_entry )
+  done
+  new_path=( $canonical_output )
 
   original_path=( "${path[@]}" )
   integer path_changed=$(( $#original_path != $#new_path ))
@@ -163,23 +150,16 @@ function {
     for list_entry in "${list_entries[@]}"; do
       list_key=v:$list_entry
       if [[ -n ${list_seen[$list_key]-} ]]; then
-        (( is_interactive )) &&
-          print -ru2 -- \
-            "zsh startup: removed exact duplicate $list_name entry: ${list_entry:-<default>}"
         continue
       fi
       list_seen[$list_key]=1
-      unique_list_entries+=( "$list_entry" )
-      (( is_interactive )) || continue
-      [[ -n $list_entry && -d $list_entry ]] || continue
-      canonical_list_entry=${list_entry:A}
-      prior_list_entry=${canonical_list_entries[$canonical_list_entry]-}
-      if [[ -n $prior_list_entry && $prior_list_entry != $list_entry ]]; then
-        print -ru2 -- \
-          "zsh startup: canonically equivalent $list_name entries: $prior_list_entry and $list_entry"
-      else
+      if [[ -n $list_entry && -d $list_entry ]]; then
+        canonical_list_entry=${list_entry:A}
+        prior_list_entry=${canonical_list_entries[$canonical_list_entry]-}
+        [[ -z $prior_list_entry || $prior_list_entry == $list_entry ]] || continue
         canonical_list_entries[$canonical_list_entry]=$list_entry
       fi
+      unique_list_entries+=( "$list_entry" )
     done
     typeset -gx "$list_name=${(j.:.)unique_list_entries}"
   done
@@ -190,49 +170,30 @@ function {
   local -a managed_fpath new_fpath
   [[ -d $orb_completions ]] && managed_fpath+=( $orb_completions )
 
-  local -A fpath_seen managed_fpath_seen managed_fpath_input_count
-  integer managed_fpath_count
+  local -A fpath_seen
   for candidate in $managed_fpath; do
     fpath_seen[$candidate]=1
-    managed_fpath_seen[$candidate]=1
     new_fpath+=( $candidate )
   done
   for inherited_entry in "${fpath[@]}"; do
-    if [[ -z $inherited_entry ]]; then
-      (( is_interactive )) &&
-        print -ru2 -- 'zsh startup: removed unsafe empty fpath entry'
-      continue
-    fi
+    [[ -n $inherited_entry ]] || continue
     if [[ -n ${fpath_seen[$inherited_entry]-} ]]; then
-      if [[ -n ${managed_fpath_seen[$inherited_entry]-} ]]; then
-        managed_fpath_count=${managed_fpath_input_count[$inherited_entry]:-0}
-        (( ++managed_fpath_count ))
-        managed_fpath_input_count[$inherited_entry]=$managed_fpath_count
-      fi
-      if (( is_interactive )) &&
-        { [[ -z ${managed_fpath_seen[$inherited_entry]-} ]] ||
-          (( managed_fpath_count > 1 )); }; then
-        print -ru2 -- "zsh startup: removed exact duplicate fpath entry: $inherited_entry"
-      fi
       continue
     fi
     fpath_seen[$inherited_entry]=1
     new_fpath+=( $inherited_entry )
   done
 
-  if (( is_interactive )); then
-    canonical_list_entries=()
-    for inherited_entry in "${new_fpath[@]}"; do
-      [[ -d $inherited_entry ]] || continue
+  canonical_list_entries=()
+  canonical_output=()
+  for inherited_entry in "${new_fpath[@]}"; do
+    if [[ -d $inherited_entry ]]; then
       canonical_list_entry=${inherited_entry:A}
       prior_list_entry=${canonical_list_entries[$canonical_list_entry]-}
-      if [[ -n $prior_list_entry && $prior_list_entry != $inherited_entry ]]; then
-        print -ru2 -- \
-          "zsh startup: canonically equivalent fpath entries: $prior_list_entry and $inherited_entry"
-      else
-        canonical_list_entries[$canonical_list_entry]=$inherited_entry
-      fi
-    done
-  fi
-  fpath=( $new_fpath )
+      [[ -z $prior_list_entry || $prior_list_entry == $inherited_entry ]] || continue
+      canonical_list_entries[$canonical_list_entry]=$inherited_entry
+    fi
+    canonical_output+=( $inherited_entry )
+  done
+  fpath=( $canonical_output )
 } "$@"

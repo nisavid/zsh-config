@@ -177,6 +177,23 @@ env GIT_CONFIG_COUNT=0 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
   git -C $ignore_repo check-ignore -q profile.d/example.local.zshrc ||
   fail 'migrated host-local profile fragments are not ignored'
 
+warp_zdotdir=$tmpdir/warp-zsh
+warp_log=$tmpdir/warp.stderr
+mkdir -p -- $warp_zdotdir/profile.d
+ln -s -- $repo_root/profile.d/warpify.zshrc \
+  $warp_zdotdir/profile.d/warpify.zshrc
+env -i \
+  TERM_PROGRAM=CodexTest \
+  WARP_COMPAT=0 \
+  ZDOTDIR=$warp_zdotdir \
+  $zsh_bin -fic 'source "$1" zshrc' -- $repo_root/profiles.zsh \
+  2>$warp_log ||
+  fail 'the optional-profile dispatcher rejected ordinary non-Warp startup'
+[[ ! -s $warp_log ]] || {
+  sed -n '1,80p' $warp_log >&2
+  fail 'the Warp profile reported a false failure outside Warp'
+}
+
 openclaw_homebrew_output=$(
   env -i \
     HOMEBREW_PREFIX=/opt/custom-homebrew \

@@ -156,13 +156,23 @@ zi_polaris_sbin=$zi_home/polaris/sbin
 rustup_bin=$homebrew_prefix/opt/rustup/bin
 homebrew_bin=$homebrew_prefix/bin
 homebrew_sbin=$homebrew_prefix/sbin
+homebrew_info=$homebrew_prefix/share/info
+man_primary=$fixture_home/fixture-man
+man_alias=$fixture_home/fixture-man-alias
+man_extra=$fixture_home/fixture-man-extra
+terminfo_primary=$fixture_home/fixture-terminfo
+terminfo_alias=$fixture_home/fixture-terminfo-alias
 
 mkdir -p -- \
   $fixture_config/environment.d $fixture_zdotdir $fixture_bin $fixture_fpath \
   $shim_dir $lmstudio_bin $kde_bin $krew_bin \
   $orb_bin $orb_completions $vite_bin $bun_bin $pnpm_bin \
   $cargo_bin $go_bin $pyenv_bin $zi_bin \
-  $zi_polaris_bin $zi_polaris_sbin $rustup_bin $homebrew_bin $homebrew_sbin
+  $zi_polaris_bin $zi_polaris_sbin $rustup_bin \
+  $homebrew_bin $homebrew_sbin $homebrew_info \
+  $man_primary $man_extra $terminfo_primary
+ln -s -- $man_primary $man_alias
+ln -s -- $terminfo_primary $terminfo_alias
 
 print -rl -- \
   'function compdef { : }' \
@@ -186,13 +196,14 @@ print -rl -- \
   "PNPM_HOME=$pnpm_home" \
   "GOBIN=$go_bin" \
   "PATH=\$PATH:$homebrew_bin:/usr/bin::/usr/bin" \
+  "INFOPATH=$homebrew_info:\${INFOPATH:-}" \
   >$fixture_config/environment.d/00-fixture.conf
 
 print -rl -- "#!$zsh_bin" 'exit 0' >$shim_dir/k9s
 print -rl -- "#!$zsh_bin" 'exit 0' >$homebrew_bin/k9s
 print -rl -- \
   "#!$zsh_bin" \
-  "print -r -- ${(q)fixture_home}/fixture-man:${(q)fixture_home}/fixture-man-extra" \
+  "print -r -- ${(q)man_primary}:${(q)man_primary}:${(q)man_alias}:${(q)man_extra}" \
   >$fixture_bin/manpath
 fnm_multishell_bin=$fixture_home/.local/state/fnm_multishell/bin
 fnm_refreshed_bin=$fixture_home/.local/state/fnm_multishell_refreshed/bin
@@ -350,16 +361,27 @@ function shell_probe {
     cd -- $probe_cwd
     env -i \
       HOME=$fixture_home \
+      INFOPATH=$homebrew_info:$homebrew_info: \
+      MANPATH=$man_primary:$man_alias \
       PATH=$initial_path \
       SSH_CONNECTION=fixture \
       TERM=dumb \
+      TERMINFO_DIRS=$terminfo_primary:$terminfo_alias \
       TERM_PROGRAM=CodexTest \
       WARP_COMPAT=1 \
       $zsh_bin $shell_flags \
       'local entry
      (( $+functions[zi_test_run_deferred] )) && zi_test_run_deferred
      integer empty_count=0 shim_count=0 system_count=0 orb_count=0
+     integer canonical_path_duplicate_count=0
+     integer canonical_infopath_duplicate_count=0
+     integer canonical_manpath_duplicate_count=0
+     integer canonical_terminfo_duplicate_count=0
      integer local_bin_count=0 appimage_count=0 orb_completion_count=0
+     local canonical_path_entry
+     local search_name
+     local -a search_entries
+     local -A canonical_path_seen
      for entry in $path; do
        [[ -n $entry ]] || (( empty_count++ ))
        [[ $entry == $HOME/.local/lib/secret-exec/bin ]] && (( shim_count++ ))
@@ -367,7 +389,35 @@ function shell_probe {
        [[ $entry == $HOME/.local/bin/appimage ]] && (( appimage_count++ ))
        [[ $entry == /usr/bin ]] && (( system_count++ ))
        [[ $entry == $HOME/.orbstack/bin ]] && (( orb_count++ ))
+       if [[ -d $entry ]]; then
+         canonical_path_entry=${entry:A}
+         if [[ -n ${canonical_path_seen[$canonical_path_entry]-} ]]; then
+           (( canonical_path_duplicate_count++ ))
+         else
+           canonical_path_seen[$canonical_path_entry]=$entry
+         fi
+       fi
      done
+     for search_name in INFOPATH MANPATH TERMINFO_DIRS; do
+       search_entries=( "${(@s.:.)${(P)search_name}}" )
+       canonical_path_seen=()
+       for entry in "${search_entries[@]}"; do
+         [[ -n $entry && -d $entry ]] || continue
+         canonical_path_entry=${entry:A}
+         if [[ -n ${canonical_path_seen[$canonical_path_entry]-} ]]; then
+           case $search_name in
+             INFOPATH) (( canonical_infopath_duplicate_count++ )) ;;
+             MANPATH) (( canonical_manpath_duplicate_count++ )) ;;
+             TERMINFO_DIRS) (( canonical_terminfo_duplicate_count++ )) ;;
+           esac
+         else
+           canonical_path_seen[$canonical_path_entry]=$entry
+         fi
+       done
+     done
+     local -a info_entries=( "${(@s.:.)INFOPATH}" )
+     local -a man_entries=( "${(@s.:.)MANPATH}" )
+     local -a terminfo_entries=( "${(@s.:.)TERMINFO_DIRS}" )
      for entry in $fpath; do
        [[ $entry == $HOME/.orbstack/shell/completions/zsh ]] &&
          (( orb_completion_count++ ))
@@ -379,6 +429,13 @@ function shell_probe {
      print -r -- "LOCAL_BIN_COUNT=$local_bin_count"
      print -r -- "APPIMAGE_COUNT=$appimage_count"
      print -r -- "SYSTEM_COUNT=$system_count"
+     print -r -- "CANONICAL_PATH_DUPLICATE_COUNT=$canonical_path_duplicate_count"
+     print -r -- "CANONICAL_INFOPATH_DUPLICATE_COUNT=$canonical_infopath_duplicate_count"
+     print -r -- "CANONICAL_MANPATH_DUPLICATE_COUNT=$canonical_manpath_duplicate_count"
+     print -r -- "CANONICAL_TERMINFO_DUPLICATE_COUNT=$canonical_terminfo_duplicate_count"
+     print -r -- "INFOPATH_FIRST=$info_entries[1]"
+     print -r -- "MANPATH_FIRST=$man_entries[1]"
+     print -r -- "TERMINFO_FIRST=$terminfo_entries[1]"
      print -r -- "ORB_COUNT=$orb_count"
      print -r -- "ORB_COMPLETION_COUNT=$orb_completion_count"
      print -r -- "ORB_LOADS=${ORBSTACK_LOAD_COUNT:-0}"
@@ -421,6 +478,22 @@ function expect_probe {
     fail "$label must reserve the owned AppImage root before bootstrap"
   grep -Fxq 'SYSTEM_COUNT=1' $stdout_file ||
     fail "$label must clean duplicate inherited system PATH entries"
+  grep -Fxq 'CANONICAL_PATH_DUPLICATE_COUNT=0' $stdout_file ||
+    fail "$label must keep one effective entry per existing PATH directory"
+  grep -Fxq 'CANONICAL_INFOPATH_DUPLICATE_COUNT=0' $stdout_file ||
+    fail "$label must keep one effective entry per existing INFOPATH directory"
+  grep -Fxq 'CANONICAL_MANPATH_DUPLICATE_COUNT=0' $stdout_file ||
+    fail "$label must keep one effective entry per existing MANPATH directory"
+  grep -Fxq 'CANONICAL_TERMINFO_DUPLICATE_COUNT=0' $stdout_file ||
+    fail "$label must keep one effective entry per existing TERMINFO_DIRS directory"
+  if [[ $label == *-nonlogin ]]; then
+    grep -Fxq "INFOPATH_FIRST=$homebrew_info" $stdout_file ||
+      fail "$label must preserve the first effective INFOPATH entry"
+    grep -Fxq "MANPATH_FIRST=$man_primary" $stdout_file ||
+      fail "$label must preserve the first effective MANPATH entry"
+    grep -Fxq "TERMINFO_FIRST=$terminfo_primary" $stdout_file ||
+      fail "$label must preserve the first effective TERMINFO_DIRS entry"
+  fi
   grep -Fxq 'ORB_COUNT=1' $stdout_file ||
     fail "$label must expose OrbStack exactly once without sourcing its bundle"
   grep -Fxq 'ORB_LOADS=0' $stdout_file ||
@@ -443,17 +516,9 @@ function expect_probe {
   grep -Fxq "KDE_SRC=$kde_src" $stdout_file ||
     fail "$label must export KDE_SRC"
 
-  if (( expected_interactive )); then
-    grep -Fq 'zsh startup: removed exact duplicate PATH entry: /usr/bin' $stderr_file ||
-      fail "$label must surface inherited duplicate cleanup"
-    grep -Fq 'zsh startup: removed unsafe empty PATH entry' $stderr_file || {
-      sed -n '1,180p' $stderr_file >&2
-      fail "$label must surface empty-entry cleanup"
-    }
-  else
-    if grep -Fq 'zsh startup:' $stderr_file; then
-      fail "$label must not emit routine diagnostics in noninteractive startup"
-    fi
+  if grep -Fq 'zsh startup:' $stderr_file; then
+    sed -n '1,180p' $stderr_file >&2
+    fail "$label must normalize inherited search paths without routine diagnostics"
   fi
 
   if [[ $OSTYPE == darwin* && $label == *-login ]]; then
@@ -951,16 +1016,29 @@ canonical_home=$tmpdir/canonical-duplicate
 mkdir -p -- $canonical_home/real-bin
 ln -s -- real-bin $canonical_home/link-bin
 canonical_log=$tmpdir/canonical-duplicate.stderr
+canonical_stdout=$tmpdir/canonical-duplicate.stdout
 env -i \
   HOME=$canonical_home \
   PATH=$canonical_home/real-bin:$canonical_home/link-bin:/usr/bin:/bin \
   $zsh_bin -fic \
-  'source "$1" test "$OSTYPE"' \
+  'source "$1" test "$OSTYPE"
+   integer real_count=0 link_count=0
+   local entry
+   for entry in $path; do
+     [[ $entry == "$HOME/real-bin" ]] && (( real_count++ ))
+     [[ $entry == "$HOME/link-bin" ]] && (( link_count++ ))
+   done
+   print -r -- "REAL_PATH_COUNT=$real_count"
+   print -r -- "LINK_PATH_COUNT=$link_count"' \
   -- $repo_root/startup.zsh \
-  2>$canonical_log ||
+  >$canonical_stdout 2>$canonical_log ||
   fail 'interactive startup failed while checking canonical-equivalent PATH entries'
-grep -Fq 'zsh startup: canonically equivalent PATH entries:' $canonical_log ||
-  fail 'interactive startup must surface canonical-equivalent PATH entries without rewriting them'
+grep -Fxq 'REAL_PATH_COUNT=1' $canonical_stdout ||
+  fail 'canonical PATH normalization did not preserve the first effective entry'
+grep -Fxq 'LINK_PATH_COUNT=0' $canonical_stdout ||
+  fail 'canonical PATH normalization retained a redundant alias'
+[[ ! -s $canonical_log ]] ||
+  fail 'canonical PATH normalization emitted a routine diagnostic'
 
 launcher_home=$tmpdir/launcher
 mkdir -p -- \
@@ -1009,32 +1087,30 @@ env -i \
      "$HOME/link"
    )
    source "$1" zshrc-final "$OSTYPE"
-   integer orb_count=0 real_count=0
+   integer orb_count=0 real_count=0 link_count=0
    local entry
    for entry in "$fpath[@]"; do
      [[ $entry == "$HOME/.orbstack/shell/completions/zsh" ]] && (( orb_count++ ))
      [[ $entry == "$HOME/real" ]] && (( real_count++ ))
+     [[ $entry == "$HOME/link" ]] && (( link_count++ ))
    done
    print -r -- "INFOPATH=$INFOPATH"
    print -r -- "ORB_FPATH_COUNT=$orb_count"
-   print -r -- "REAL_FPATH_COUNT=$real_count"' \
+   print -r -- "REAL_FPATH_COUNT=$real_count"
+   print -r -- "LINK_FPATH_COUNT=$link_count"' \
   -- $repo_root/startup.zsh \
   >$list_stdout 2>$list_stderr ||
   fail 'interactive startup failed while checking colon-list and fpath cleanup'
-grep -Fxq "INFOPATH=$list_real::$list_link" $list_stdout ||
-  fail 'colon-list policy must preserve one default entry while removing exact duplicates'
+grep -Fxq "INFOPATH=$list_real:" $list_stdout ||
+  fail 'colon-list policy must preserve one default entry while normalizing duplicates'
 grep -Fxq 'ORB_FPATH_COUNT=1' $list_stdout ||
   fail 'fpath policy must keep one managed completion entry'
 grep -Fxq 'REAL_FPATH_COUNT=1' $list_stdout ||
   fail 'fpath policy must remove exact inherited duplicates'
-grep -Fq 'zsh startup: removed exact duplicate INFOPATH entry:' $list_stderr ||
-  fail 'interactive startup must surface colon-list duplicate cleanup'
-grep -Fq 'zsh startup: removed exact duplicate fpath entry:' $list_stderr ||
-  fail 'interactive startup must surface fpath duplicate cleanup'
-grep -Fq 'zsh startup: canonically equivalent INFOPATH entries:' $list_stderr ||
-  fail 'interactive startup must surface canonical-equivalent colon-list entries'
-grep -Fq 'zsh startup: canonically equivalent fpath entries:' $list_stderr ||
-  fail 'interactive startup must surface canonical-equivalent fpath entries'
+grep -Fxq 'LINK_FPATH_COUNT=0' $list_stdout ||
+  fail 'fpath policy retained a canonical alias'
+[[ ! -s $list_stderr ]] ||
+  fail 'colon-list or fpath normalization emitted a routine diagnostic'
 
 arithmetic_path='x$(print -ru2 ARITHMETIC_PATH_SUBSCRIPT_EXECUTED)'
 arithmetic_path_log=$tmpdir/arithmetic-path.stderr
@@ -1070,23 +1146,41 @@ mkdir -p -- $pattern_home/target
 ln -s -- target $pattern_home/globx
 ln -s -- target $pattern_home/'glob*'
 pattern_log=$tmpdir/pattern-paths.stderr
+pattern_stdout=$tmpdir/pattern-paths.stdout
 env -i \
   HOME=$fixture_home \
   PATH=$pattern_home/globx:$pattern_home/'glob*':/usr/bin:/bin \
   $zsh_bin -fic \
   'fpath=( "$2/globx" "$2/glob*" )
-   source "$1" zshrc-final "$OSTYPE"' \
+   source "$1" zshrc-final "$OSTYPE"
+   integer path_globx_count=0 path_glob_pattern_count=0
+   integer fpath_globx_count=0 fpath_glob_pattern_count=0
+   local entry
+   for entry in $path; do
+     [[ $entry == "$2/globx" ]] && (( path_globx_count++ ))
+     [[ $entry == "$2/glob*" ]] && (( path_glob_pattern_count++ ))
+   done
+   for entry in $fpath; do
+     [[ $entry == "$2/globx" ]] && (( fpath_globx_count++ ))
+     [[ $entry == "$2/glob*" ]] && (( fpath_glob_pattern_count++ ))
+   done
+   print -r -- "PATH_GLOBX_COUNT=$path_globx_count"
+   print -r -- "PATH_GLOB_PATTERN_COUNT=$path_glob_pattern_count"
+   print -r -- "FPATH_GLOBX_COUNT=$fpath_globx_count"
+   print -r -- "FPATH_GLOB_PATTERN_COUNT=$fpath_glob_pattern_count"' \
   -- $repo_root/startup.zsh $pattern_home \
-  2>$pattern_log ||
+  >$pattern_stdout 2>$pattern_log ||
   fail 'managed path handling rejected a literal glob token'
-grep -Fxq \
-  "zsh startup: canonically equivalent PATH entries: $pattern_home/globx and $pattern_home/glob*" \
-  $pattern_log ||
-  fail 'a literal glob token suppressed canonical PATH diagnostics'
-grep -Fxq \
-  "zsh startup: canonically equivalent fpath entries: $pattern_home/globx and $pattern_home/glob*" \
-  $pattern_log ||
-  fail 'a literal glob token suppressed canonical fpath diagnostics'
+grep -Fxq 'PATH_GLOBX_COUNT=1' $pattern_stdout ||
+  fail 'canonical PATH normalization dropped the first literal glob-like entry'
+grep -Fxq 'PATH_GLOB_PATTERN_COUNT=0' $pattern_stdout ||
+  fail 'canonical PATH normalization retained a glob-like alias'
+grep -Fxq 'FPATH_GLOBX_COUNT=1' $pattern_stdout ||
+  fail 'canonical fpath normalization dropped the first literal glob-like entry'
+grep -Fxq 'FPATH_GLOB_PATTERN_COUNT=0' $pattern_stdout ||
+  fail 'canonical fpath normalization retained a glob-like alias'
+[[ ! -s $pattern_log ]] ||
+  fail 'glob-like canonical normalization emitted a routine diagnostic'
 
 missing_interactive_log=$tmpdir/missing-interactive-policy.stderr
 mv -- $fixture_zdotdir/startup.zsh $tmpdir/startup.zsh.saved
