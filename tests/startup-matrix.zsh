@@ -372,7 +372,7 @@ function shell_probe {
       $zsh_bin $shell_flags \
       'local entry
      (( $+functions[zi_test_run_deferred] )) && zi_test_run_deferred
-     integer empty_count=0 shim_count=0 system_count=0 orb_count=0
+     integer empty_count=0 shim_count=0 system_count=0 orb_count=0 vite_count=0
      integer canonical_path_duplicate_count=0
      integer canonical_infopath_duplicate_count=0
      integer canonical_manpath_duplicate_count=0
@@ -389,6 +389,7 @@ function shell_probe {
        [[ $entry == $HOME/.local/bin/appimage ]] && (( appimage_count++ ))
        [[ $entry == /usr/bin ]] && (( system_count++ ))
        [[ $entry == $HOME/.orbstack/bin ]] && (( orb_count++ ))
+       [[ $entry == $HOME/.vite-plus/bin ]] && (( vite_count++ ))
        if [[ -d $entry ]]; then
          canonical_path_entry=${entry:A}
          if [[ -n ${canonical_path_seen[$canonical_path_entry]-} ]]; then
@@ -439,8 +440,10 @@ function shell_probe {
      print -r -- "ORB_COUNT=$orb_count"
      print -r -- "ORB_COMPLETION_COUNT=$orb_completion_count"
      print -r -- "ORB_LOADS=${ORBSTACK_LOAD_COUNT:-0}"
+     print -r -- "VITE_BIN_COUNT=$vite_count"
      print -r -- "VP_FUNCTION=${+functions[vp]}"
      print -r -- "VP_COMPLETION=${VITE_COMPLETION_LOADED:-0}"
+     print -r -- "FNM_STATE=${FNM_DIR-missing}:${chpwd_functions[(I)_fnm_autoload_hook]:-0}"
      print -r -- "DEFERRED_HELPERS=${+functions[__zshrc_repair_deferred_path]}:${+functions[__zshrc_init_fnm]}"
      print -r -- "PNPM_HOME=$PNPM_HOME"
      print -r -- "KREW_ROOT=$KREW_ROOT"
@@ -454,7 +457,8 @@ function shell_probe {
 }
 
 function expect_probe {
-  local label=$1 shell_flags=$2 expected_interactive=$3
+  local label=$1 shell_flags=$2 expected_interactive=$3 expected_vite=$4
+  local expected_vite_bin_count=$5 expected_fnm_state=$6
   local stdout_file=$tmpdir/$label.stdout
   local stderr_file=$tmpdir/$label.stderr
 
@@ -500,10 +504,14 @@ function expect_probe {
     fail "$label must not source OrbStack's mixed initializer"
   grep -Fxq "ORB_COMPLETION_COUNT=$expected_interactive" $stdout_file ||
     fail "$label has the wrong OrbStack fpath cardinality"
-  grep -Fxq "VP_FUNCTION=$expected_interactive" $stdout_file ||
+  grep -Fxq "VITE_BIN_COUNT=$expected_vite_bin_count" $stdout_file ||
+    fail "$label has the wrong Vite+ PATH cardinality"
+  grep -Fxq "VP_FUNCTION=$expected_vite" $stdout_file ||
     fail "$label has the wrong Vite+ wrapper availability"
-  grep -Fxq "VP_COMPLETION=$expected_interactive" $stdout_file ||
+  grep -Fxq "VP_COMPLETION=$expected_vite" $stdout_file ||
     fail "$label has the wrong Vite+ completion availability"
+  grep -Fxq "FNM_STATE=$expected_fnm_state" $stdout_file ||
+    fail "$label has the wrong FNM fallback state"
   grep -Fxq 'DEFERRED_HELPERS=0:0' $stdout_file ||
     fail "$label leaked deferred startup helpers into the shell namespace"
   if grep -Fq 'command not found: compdef' $stderr_file; then
@@ -528,10 +536,10 @@ function expect_probe {
   return 0
 }
 
-expect_probe noninteractive-nonlogin -c 0
-expect_probe interactive-nonlogin -ic 1
-expect_probe noninteractive-login -lc 0
-expect_probe interactive-login -lic 1
+expect_probe noninteractive-nonlogin -c 0 0 1 missing:0
+expect_probe interactive-nonlogin -ic 1 1 1 missing:0
+expect_probe noninteractive-login -lc 0 0 1 missing:0
+expect_probe interactive-login -lic 1 1 1 missing:0
 [[ ! -e $probe_cwd/init.zsh ]] ||
   fail 'interactive startup wrote a plugin cache into the shell working directory'
 grep -Fq 'export -aT MANPATH' $zi_home/plugins/manpath/init.zsh ||
@@ -559,7 +567,11 @@ grep -Fxq "PATH_FIRST=$shim_dir" $vite_failure_stdout ||
 grep -Fq 'Vite+ is installed but failed to load from' $vite_failure_stderr ||
   fail 'a deferred Vite+ source failure was silent'
 
-mv -- $vite_home/env $tmpdir/vite-env.saved
+mv -- $vite_home $tmpdir/vite-home.saved
+expect_probe no-vite-noninteractive-nonlogin -c 0 0 0 missing:0
+expect_probe no-vite-interactive-nonlogin -ic 1 0 0 $fixture_home/.local/share/fnm:1
+expect_probe no-vite-noninteractive-login -lc 0 0 0 missing:0
+expect_probe no-vite-interactive-login -lic 1 0 0 $fixture_home/.local/share/fnm:1
 fnm_deferred_stdout=$tmpdir/fnm-deferred.stdout
 env -i \
   HOME=$fixture_home \
@@ -922,7 +934,7 @@ do
       ;;
   esac
 done
-mv -- $tmpdir/vite-env.saved $vite_home/env
+mv -- $tmpdir/vite-home.saved $vite_home
 
 cp -- $zi_bin/zi.zsh $tmpdir/zi.zsh.saved
 print -rl -- \
