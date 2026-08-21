@@ -645,13 +645,15 @@ if (( ZI_READY )); then
     # Node (fnm)
     # Zi's ordinary deferred atload does not publish task status; explicit
     # diagnostics and the final PATH repair are the observable failure contract.
+    # /dev/null keeps these local actions deferred without a remote carrier.
     zi wait lucid ${ZI_LIGHT:+light-mode} \
       id-as:'fnm' \
       if:'[[ ! -r ~/.vite-plus/env ]]' \
       has:'fnm' \
       as:'null' \
+      nocd \
       atload:"$fnm_init $repair_path $finish_action" \
-      for z-shell/0
+      for /dev/null
 
     # Vite+ — wait'2' so it loads after compinit (wait'1') and its vp/vpr
     # completions register; the snippet also defines the vp() wrapper.
@@ -659,8 +661,9 @@ if (( ZI_READY )); then
       id-as:'vite-plus' \
       if:'[[ -r ~/.vite-plus/env ]]' \
       as:'null' \
+      nocd \
       atload:"$vite_init $repair_path $finish_action" \
-      for z-shell/0
+      for /dev/null
   }
 
   # KDE

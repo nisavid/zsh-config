@@ -558,12 +558,15 @@ env -i \
   VITE_TEST_FAIL=1 \
   WARP_COMPAT=1 \
   $zsh_bin -ic \
-  'zi_test_run_deferred
+  'print -r -- "VITE_CARRIER=${ZI_TEST_DEFERRED_CANDIDATE:-missing}"
+   zi_test_run_deferred
    print -r -- "PATH_FIRST=$path[1]"' \
   >$vite_failure_stdout 2>$vite_failure_stderr ||
   fail 'a deferred Vite+ source failure made the shell unusable'
 grep -Fxq "PATH_FIRST=$shim_dir" $vite_failure_stdout ||
   fail 'a deferred Vite+ source failure displaced the managed shim'
+grep -Fxq 'VITE_CARRIER=/dev/null' $vite_failure_stdout ||
+  fail 'deferred Vite+ setup depends on a remote carrier'
 grep -Fq 'Vite+ is installed but failed to load from' $vite_failure_stderr ||
   fail 'a deferred Vite+ source failure was silent'
 
@@ -581,7 +584,8 @@ env -i \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
   $zsh_bin -ic \
-  'zi_test_run_deferred
+  'print -r -- "FNM_CARRIER=${ZI_TEST_DEFERRED_CANDIDATE:-missing}"
+   zi_test_run_deferred
    print -r -- "$path[1]"
    print -r -- "DEFERRED_HELPERS=${+functions[__zshrc_repair_deferred_path]}:${+functions[__zshrc_init_fnm]}"
    print -r -- "FNM_STATE=$FNM_DIR:${chpwd_functions[(I)_fnm_autoload_hook]}"' \
@@ -589,6 +593,8 @@ env -i \
   fail 'the deferred fnm startup branch failed without Vite+'
 grep -Fxq $shim_dir $fnm_deferred_stdout ||
   fail 'deferred fnm setup displaced the managed shim directory'
+grep -Fxq 'FNM_CARRIER=/dev/null' $fnm_deferred_stdout ||
+  fail 'deferred fnm setup depends on a remote carrier'
 grep -Fxq 'DEFERRED_HELPERS=0:0' $fnm_deferred_stdout ||
   fail 'deferred fnm setup leaked helpers into the shell namespace'
 grep -Fxq "FNM_STATE=$fixture_home/.local/share/fnm:1" $fnm_deferred_stdout ||
