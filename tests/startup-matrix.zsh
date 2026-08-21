@@ -294,9 +294,16 @@ print -rl -- \
   "typeset -gA ZI=( PLUGINS_DIR ${(q)zi_home}/plugins )" \
   'function zi {' \
   '  local argument candidate condition atinit atload has id_as pick plugin_dir' \
-  '  integer completion_init=0 defer=0' \
+  '  integer completion_init=0 defer=0 expect_candidate=0 no_cd=0' \
   '  for argument in "$@"; do' \
+  '    if (( expect_candidate )); then' \
+  '      candidate=$argument' \
+  '      expect_candidate=0' \
+  '      continue' \
+  '    fi' \
   '    case $argument in' \
+  '      (for) expect_candidate=1 ;;' \
+  '      (nocd) no_cd=1 ;;' \
   '      (wait|wait2|wait:*) defer=1 ;;' \
   '      (atinit:*) atinit=${argument#atinit:} ;;' \
   '      (atload:*) atload=${argument#atload:} ;;' \
@@ -318,8 +325,10 @@ print -rl -- \
   '    return 0' \
   '  fi' \
   '  if (( defer )) && [[ $id_as == (fnm|vite-plus) ]]; then' \
+  '    [[ $candidate == /* ]] || return 1' \
   '    typeset -g ZI_TEST_DEFERRED_CANDIDATE=$candidate' \
   '    typeset -g ZI_TEST_DEFERRED_ATLOAD=$atload' \
+  '    typeset -gi ZI_TEST_DEFERRED_NOCD=$no_cd' \
   '    return 0' \
   '  fi' \
   '  if [[ -n $atinit ]]; then' \
@@ -338,8 +347,14 @@ print -rl -- \
   '  fi' \
   '  [[ -z ${ZI_TEST_DEFERRED_CANDIDATE:-} || ! -r $ZI_TEST_DEFERRED_CANDIDATE ]] ||' \
   '    source "$ZI_TEST_DEFERRED_CANDIDATE"' \
-  '  [[ -z ${ZI_TEST_DEFERRED_ATLOAD:-} ]] || eval "$ZI_TEST_DEFERRED_ATLOAD"' \
-  '  unset ZI_TEST_DEFERRED_CANDIDATE ZI_TEST_DEFERRED_ATLOAD' \
+  '  if [[ -n ${ZI_TEST_DEFERRED_ATLOAD:-} ]]; then' \
+  '    if (( ${ZI_TEST_DEFERRED_NOCD:-0} )); then' \
+  '      eval "$ZI_TEST_DEFERRED_ATLOAD"' \
+  '    else' \
+  '      ( cd -- "$ZI_TEST_DEFERRED_CANDIDATE" && eval "$ZI_TEST_DEFERRED_ATLOAD" )' \
+  '    fi' \
+  '  fi' \
+  '  unset ZI_TEST_DEFERRED_CANDIDATE ZI_TEST_DEFERRED_ATLOAD ZI_TEST_DEFERRED_NOCD' \
   '}' \
   'unfunction compdef 2>/dev/null' \
   'unset _comps 2>/dev/null' \
@@ -457,8 +472,13 @@ function shell_probe {
 }
 
 function expect_probe {
-  local label=$1 shell_flags=$2 expected_interactive=$3 expected_vite=$4
-  local expected_vite_bin_count=$5 expected_fnm_state=$6
+  local label=$1 shell_flags=$2 expected_interactive=$3
+  integer vite_present=$4
+  integer expected_vite=$(( expected_interactive && vite_present ))
+  integer expected_vite_bin_count=$vite_present
+  local expected_fnm_state=missing:0
+  (( expected_interactive && ! vite_present )) &&
+    expected_fnm_state=$fixture_home/.local/share/fnm:1
   local stdout_file=$tmpdir/$label.stdout
   local stderr_file=$tmpdir/$label.stderr
 
@@ -536,10 +556,10 @@ function expect_probe {
   return 0
 }
 
-expect_probe noninteractive-nonlogin -c 0 0 1 missing:0
-expect_probe interactive-nonlogin -ic 1 1 1 missing:0
-expect_probe noninteractive-login -lc 0 0 1 missing:0
-expect_probe interactive-login -lic 1 1 1 missing:0
+expect_probe noninteractive-nonlogin -c 0 1
+expect_probe interactive-nonlogin -ic 1 1
+expect_probe noninteractive-login -lc 0 1
+expect_probe interactive-login -lic 1 1
 [[ ! -e $probe_cwd/init.zsh ]] ||
   fail 'interactive startup wrote a plugin cache into the shell working directory'
 grep -Fq 'export -aT MANPATH' $zi_home/plugins/manpath/init.zsh ||
@@ -558,23 +578,20 @@ env -i \
   VITE_TEST_FAIL=1 \
   WARP_COMPAT=1 \
   $zsh_bin -ic \
-  'print -r -- "VITE_CARRIER=${ZI_TEST_DEFERRED_CANDIDATE:-missing}"
-   zi_test_run_deferred
+  'zi_test_run_deferred
    print -r -- "PATH_FIRST=$path[1]"' \
   >$vite_failure_stdout 2>$vite_failure_stderr ||
   fail 'a deferred Vite+ source failure made the shell unusable'
 grep -Fxq "PATH_FIRST=$shim_dir" $vite_failure_stdout ||
   fail 'a deferred Vite+ source failure displaced the managed shim'
-grep -Fxq 'VITE_CARRIER=/dev/null' $vite_failure_stdout ||
-  fail 'deferred Vite+ setup depends on a remote carrier'
 grep -Fq 'Vite+ is installed but failed to load from' $vite_failure_stderr ||
   fail 'a deferred Vite+ source failure was silent'
 
 mv -- $vite_home $tmpdir/vite-home.saved
-expect_probe no-vite-noninteractive-nonlogin -c 0 0 0 missing:0
-expect_probe no-vite-interactive-nonlogin -ic 1 0 0 $fixture_home/.local/share/fnm:1
-expect_probe no-vite-noninteractive-login -lc 0 0 0 missing:0
-expect_probe no-vite-interactive-login -lic 1 0 0 $fixture_home/.local/share/fnm:1
+expect_probe no-vite-noninteractive-nonlogin -c 0 0
+expect_probe no-vite-interactive-nonlogin -ic 1 0
+expect_probe no-vite-noninteractive-login -lc 0 0
+expect_probe no-vite-interactive-login -lic 1 0
 fnm_deferred_stdout=$tmpdir/fnm-deferred.stdout
 env -i \
   HOME=$fixture_home \
@@ -584,8 +601,7 @@ env -i \
   TERM_PROGRAM=CodexTest \
   WARP_COMPAT=1 \
   $zsh_bin -ic \
-  'print -r -- "FNM_CARRIER=${ZI_TEST_DEFERRED_CANDIDATE:-missing}"
-   zi_test_run_deferred
+  'zi_test_run_deferred
    print -r -- "$path[1]"
    print -r -- "DEFERRED_HELPERS=${+functions[__zshrc_repair_deferred_path]}:${+functions[__zshrc_init_fnm]}"
    print -r -- "FNM_STATE=$FNM_DIR:${chpwd_functions[(I)_fnm_autoload_hook]}"' \
@@ -593,8 +609,6 @@ env -i \
   fail 'the deferred fnm startup branch failed without Vite+'
 grep -Fxq $shim_dir $fnm_deferred_stdout ||
   fail 'deferred fnm setup displaced the managed shim directory'
-grep -Fxq 'FNM_CARRIER=/dev/null' $fnm_deferred_stdout ||
-  fail 'deferred fnm setup depends on a remote carrier'
 grep -Fxq 'DEFERRED_HELPERS=0:0' $fnm_deferred_stdout ||
   fail 'deferred fnm setup leaked helpers into the shell namespace'
 grep -Fxq "FNM_STATE=$fixture_home/.local/share/fnm:1" $fnm_deferred_stdout ||
@@ -612,10 +626,12 @@ env -i \
   $zsh_bin -ic \
   'local deferred_candidate=$ZI_TEST_DEFERRED_CANDIDATE
    local deferred_atload=$ZI_TEST_DEFERRED_ATLOAD
+   local deferred_nocd=$ZI_TEST_DEFERRED_NOCD
    zi_test_run_deferred
    export FNM_TEST_MODE=refresh
    ZI_TEST_DEFERRED_CANDIDATE=$deferred_candidate
    ZI_TEST_DEFERRED_ATLOAD=$deferred_atload
+   ZI_TEST_DEFERRED_NOCD=$deferred_nocd
    zi_test_run_deferred
    integer hook_count=0 old_count=0 refreshed_count=0
    local entry
