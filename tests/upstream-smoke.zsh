@@ -69,7 +69,7 @@ function fail_startup {
 
   drain_startup_output "$name" "$output"
   print_startup_diagnostics "$output"
-  zpty -d "$name" 2>/dev/null || true
+  zpty -d "$name" || true
   fail "$message"
 }
 
@@ -225,7 +225,7 @@ function run_startup {
     fail_startup "$name" "$output" "interactive startup $ordinal produced duplicate managed PATH entries"
   grep -Fq 'SMOKE_EXIT=clean' "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal did not reach clean exit"
-  zpty -d "$name" 2>/dev/null || true
+  zpty -d "$name" || true
 }
 
 run_startup 1
