@@ -4,10 +4,123 @@ emulate -L zsh
 setopt errexit nounset pipefail
 
 readonly repo_root=${0:A:h:h}
-readonly zsh_bin=${commands[zsh]:A}
+zsh_bin=${commands[zsh]-}
+[[ -z $zsh_bin ]] || zsh_bin=${zsh_bin:A}
+readonly zsh_bin
+tmpdir=''
+smoke_phase=preflight
+integer smoke_zpty_ready=0
+function finish_smoke {
+  emulate -L zsh
+  local original_status=$1
+  integer pty_cleanup_status=0 cleanup_status=0
+  local fixture_cleanup_status=unavailable:not-created
+  trap - EXIT
+  local evidence_dir=${UPSTREAM_SMOKE_EVIDENCE_DIR:-}
+  local result_file=$evidence_dir/result.txt
+  local ordinal name output destination availability
+  local -a records=(
+    schema=upstream-smoke-evidence-v1
+    "status=$original_status"
+    "phase=$smoke_phase"
+  )
+  if (( smoke_zpty_ready )); then
+    for ordinal in 1 2; do
+      name=upstream-smoke-$ordinal
+      if zpty -t "$name" 2>/dev/null; then
+        drain_startup_output "$name" "$tmpdir/startup-$ordinal.stdout" || true
+        if zpty -d "$name"; then
+          :
+        else
+          pty_cleanup_status=$?
+          print -ru2 -- "could not delete smoke PTY: $name"
+        fi
+      fi
+    done
+  fi
+  if [[ -n $evidence_dir && -d $evidence_dir && ! -h $evidence_dir ]]; then
+    for ordinal in 1 2; do
+      output=$tmpdir/startup-$ordinal.stdout
+      destination=$evidence_dir/startup-$ordinal.stdout
+      availability=unavailable:not-produced
+      if [[ -n $tmpdir && -f $output && ! -h $output && -r $output ]]; then
+        if [[ -e $destination || -h $destination ]] ||
+          ! cp -- "$output" "$destination"; then
+          availability=unavailable:copy-failed
+          print -ru2 -- "could not retain startup transcript: $destination"
+        else
+          availability=available
+        fi
+      fi
+      records+=( "startup_$ordinal=$availability" )
+    done
+  fi
+  if [[ -n $evidence_dir && -d $evidence_dir && ! -h $evidence_dir ]]; then
+    local source_commit git_version zi_head_at_exit=unavailable:checkout-not-observed
+    if source_commit=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null) &&
+      [[ ${#source_commit} == 40 && $source_commit != *[^0-9a-f]* ]]; then
+      :
+    else
+      source_commit=unavailable:query-failed-or-invalid
+    fi
+    git_version=$(git --version 2>/dev/null) || git_version=unavailable:query-failed
+    local zi_dir=$tmpdir/home/.local/share/zi/bin
+    if [[ -n $tmpdir && -d $zi_dir && ! -h $zi_dir && -f $zi_dir/zi.zsh && ! -h $zi_dir/zi.zsh ]]; then
+      zi_head_at_exit=$(git -C "$zi_dir" rev-parse HEAD 2>/dev/null) ||
+        zi_head_at_exit=unavailable:query-failed
+    fi
+    local key value
+    local -a identities=(
+      source_commit "$source_commit"
+      zsh_version "$ZSH_VERSION"
+      zsh_command "$zsh_bin"
+      git_version "$git_version"
+      git_command "${commands[git]-unavailable:not-found}"
+      platform "$OSTYPE"
+      architecture "$MACHTYPE"
+      zi_head_before "${zi_head_before-unavailable:not-observed}"
+      zi_head_after "${zi_head_after-unavailable:not-observed}"
+      zi_head_at_exit "$zi_head_at_exit"
+      source_content unavailable:not-hashed
+      dependency_inventory unavailable:not-collected
+      runner_identity unavailable:not-provided
+    )
+    for key value in "${(@)identities}"; do
+      if [[ -z $value || ${#value} -gt 160 || $value == *$'\n'* || $value == *$'\r'* ]]; then
+        value=unavailable:unsupported-value
+      fi
+      case $key in
+        source_commit|zi_head*)
+          if [[ $value != unavailable:* &&
+            ( ${#value} != 40 || $value == *[^0-9a-f]* ) ]]; then
+            value=unavailable:invalid-commit
+          fi
+          ;;
+      esac
+      records+=( "$key=$value" )
+    done
+  fi
+  cleanup_status=$pty_cleanup_status
+  if [[ -n $tmpdir ]]; then
+    fixture_cleanup_status=0
+    rm -rf -- "$tmpdir" || fixture_cleanup_status=$?
+    (( cleanup_status != 0 )) || cleanup_status=$fixture_cleanup_status
+  fi
+  records+=( "cleanup_status=$cleanup_status"
+    "pty_cleanup_status=$pty_cleanup_status" "fixture_cleanup_status=$fixture_cleanup_status" )
+  (( cleanup_status == 0 )) ||
+    print -ru2 -- "upstream smoke cleanup failed: status $cleanup_status"
+  if [[ -n $evidence_dir ]]; then
+    if [[ ! -d $evidence_dir || -h $evidence_dir || -e $result_file || -h $result_file ]] ||
+      ! print -rl -- "${(@)records}" >"$result_file"; then
+      print -ru2 -- 'could not retain smoke result'
+    fi
+  fi
+  exit $original_status
+}
+trap 'finish_smoke $?' EXIT
 tmpdir=$(mktemp -d)
 readonly tmpdir
-trap 'rm -rf -- $tmpdir' EXIT
 
 function fail {
   print -ru2 -- "upstream smoke failed: $1"
@@ -15,6 +128,8 @@ function fail {
 }
 
 function count_fixed_string_occurrences {
+  emulate -L zsh
+  setopt nounset err_return pipefail
   local needle=$1
   local input=$2
   integer count=0
@@ -24,6 +139,8 @@ function count_fixed_string_occurrences {
 }
 
 function drain_startup_output {
+  emulate -L zsh
+  setopt nounset err_return pipefail
   local name=$1
   local output=$2
   local chunk
@@ -34,6 +151,8 @@ function drain_startup_output {
 }
 
 function service_startup_output {
+  emulate -L zsh
+  setopt nounset err_return pipefail
   local name=$1
   local output=$2
   local compinit_prompt=$3
@@ -51,8 +170,10 @@ function service_startup_output {
 }
 
 function print_startup_diagnostics {
+  emulate -L zsh
+  setopt nounset err_return pipefail
   local output=$1
-  [[ -r $output ]] || return
+  [[ -r $output ]] || return 0
 
   integer line_count
   line_count=$(wc -l <"$output")
@@ -63,18 +184,23 @@ function print_startup_diagnostics {
 }
 
 function fail_startup {
+  emulate -L zsh
+  setopt nounset err_return pipefail
   local name=$1
   local output=$2
   local message=$3
 
   drain_startup_output "$name" "$output"
+
   print_startup_diagnostics "$output"
   zpty -d "$name" || true
   fail "$message"
 }
 
+[[ -n $zsh_bin ]] || fail 'zsh startup command is required'
 (( $+commands[git] )) || fail 'git is required'
 zmodload zsh/zpty || fail 'zsh/zpty is required'
+smoke_zpty_ready=1
 autoload -Uz is-at-least
 is-at-least 5.9 || fail "Zsh 5.9 or newer is required; found $ZSH_VERSION"
 readonly prompt_timeout_seconds=${UPSTREAM_SMOKE_PROMPT_TIMEOUT_SECONDS:-300}
@@ -83,6 +209,7 @@ readonly prompt_timeout_seconds=${UPSTREAM_SMOKE_PROMPT_TIMEOUT_SECONDS:-300}
 readonly prompt_timeout_ticks=$(( prompt_timeout_seconds * 20 ))
 readonly phase_timeout_ticks=1200
 
+smoke_phase=fixture
 fixture_home=$tmpdir/home
 fixture_zdotdir=$fixture_home/.config/zsh
 fixture_bin=$tmpdir/bin
@@ -108,6 +235,8 @@ print -rl -- '#!/usr/bin/env zsh' 'exit 0' >$shim_dir/k9s
 chmod +x $shim_dir/k9s
 
 function run_startup {
+  emulate -L zsh
+  setopt nounset err_return pipefail
   local ordinal=$1
   local name=upstream-smoke-$ordinal
   local output=$tmpdir/startup-$ordinal.stdout
@@ -125,6 +254,7 @@ function run_startup {
     WARP_COMPAT=1
     $zsh_bin -i
   )
+  smoke_phase=startup-$ordinal/prompt
   zpty -b "$name" "${(@q)startup_argv}"
 
   local REPLY
@@ -144,6 +274,7 @@ function run_startup {
   zpty -t "$name" || fail_startup "$name" "$output" \
     "interactive startup $ordinal exited before reaching a prompt"
 
+  smoke_phase=startup-$ordinal/deferred
   # Advance several prompt cycles so Zi's ordered wait queues can drain.
   integer prompt_cycle
   integer prompt_count_before=0
@@ -174,6 +305,7 @@ function run_startup {
 
   count_fixed_string_occurrences "$prompt_marker" "$output"
   prompt_count_before=$REPLY
+  smoke_phase=startup-$ordinal/probe
   zpty -w "$name" "$command_text" || fail_startup "$name" "$output" \
     "could not start the smoke probe for $name"
 
@@ -197,6 +329,7 @@ function run_startup {
   zpty -t "$name" || fail_startup "$name" "$output" \
     "interactive startup $ordinal exited before finishing the smoke probe"
 
+  smoke_phase=startup-$ordinal/exit
   zpty -w "$name" exit || fail_startup "$name" "$output" \
     "could not request a clean exit from $name"
 
@@ -213,6 +346,7 @@ function run_startup {
   done
   drain_startup_output "$name" "$output"
 
+  smoke_phase=startup-$ordinal/assertions
   grep -Fq 'SMOKE_READY=1' "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal did not load Zi"
   grep -Fq 'SMOKE_COMPDEF=1' "$output" ||
@@ -231,10 +365,15 @@ function run_startup {
 run_startup 1
 [[ -r $fixture_home/.local/share/zi/bin/zi.zsh ]] ||
   fail 'the first startup did not install real Zi'
+smoke_phase=zi-head-before
 zi_head_before=$(git -C "$fixture_home/.local/share/zi/bin" rev-parse HEAD)
 run_startup 2
+smoke_phase=zi-head-after
 zi_head_after=$(git -C "$fixture_home/.local/share/zi/bin" rev-parse HEAD)
+smoke_phase=zi-consistency
 [[ $zi_head_after == $zi_head_before ]] ||
   fail 'the second startup unexpectedly replaced the Zi checkout'
+
+smoke_phase=complete
 
 print -r -- 'upstream Zi smoke checks passed'

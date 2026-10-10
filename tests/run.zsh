@@ -10,6 +10,7 @@ readonly -a tests=(
   pprint-file.zsh
   profile-phases.zsh
   startup-matrix.zsh
+  upstream-smoke-evidence.zsh
   zshenv.zsh
 )
 
