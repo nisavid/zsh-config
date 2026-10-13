@@ -383,7 +383,11 @@ if (( ZI_READY )); then
     )
     if (( $+commands[vivid] )); then :
     elif (( $+commands[cargo] )); then args[1,0]=( cargo:'vivid' )
-    else zi wait lucid ${ZI_LIGHT:+light-mode} as:'program' from:'gh-r' bpick:'*x86_64-unknown-linux-gnu*' extract:'!' pick:'vivid' for sharkdp/vivid
+    else
+      zi wait lucid ${ZI_LIGHT:+light-mode} \
+        as:'program' from:'gh-r' bpick:'*x86_64-unknown-linux-gnu*' extract:'!' pick:'vivid' \
+        atload:'source "$ZDOTDIR/startup.zsh" zshrc-final "$OSTYPE"' \
+        for sharkdp/vivid
     fi
     zi wait lucid ${ZI_LIGHT:+light-mode} "${(@)args}" for z-shell/0
   }
