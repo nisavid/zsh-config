@@ -292,8 +292,12 @@ print -rl -- \
 
 print -rl -- \
   "typeset -gA ZI=( PLUGINS_DIR ${(q)zi_home}/plugins )" \
+  'if [[ -n ${ZI_TEST_VIVID_COMMAND_PATH:-} ]]; then' \
+  '  path=( "${(@s.:.)ZI_TEST_VIVID_COMMAND_PATH}" )' \
+  '  rehash' \
+  'fi' \
   'function zi {' \
-  '  local argument candidate condition atinit atload has id_as pick plugin_dir' \
+  '  local argument candidate condition atinit atload has id_as pick plugin_dir load_as' \
   '  integer completion_init=0 defer=0 expect_candidate=0 no_cd=0' \
   '  for argument in "$@"; do' \
   '    if (( expect_candidate )); then' \
@@ -305,6 +309,7 @@ print -rl -- \
   '      (for) expect_candidate=1 ;;' \
   '      (nocd) no_cd=1 ;;' \
   '      (wait|wait2|wait:*) defer=1 ;;' \
+  '      (as:*) load_as=${argument#as:} ;;' \
   '      (atinit:*) atinit=${argument#atinit:} ;;' \
   '      (atload:*) atload=${argument#atload:} ;;' \
   '      (atload=+*) atload=${argument#atload=+} ;;' \
@@ -316,6 +321,15 @@ print -rl -- \
   '      (/*) candidate=$argument ;;' \
   '    esac' \
   '  done' \
+  '  if [[ -n ${ZI_TEST_VIVID_COMMAND_PATH:-} ]]; then' \
+  '    if (( defer )) && [[ $candidate == sharkdp/vivid && $load_as == program ]]; then' \
+  '      plugin_dir=$ZI[PLUGINS_DIR]/${candidate//\//---}' \
+  '      local program=$plugin_dir/$pick' \
+  '      typeset -g ZI_TEST_VIVID_PROGRAM_DIR=${program:A:h}' \
+  '      typeset -g ZI_TEST_VIVID_ATLOAD=$atload' \
+  '    fi' \
+  '    return 0' \
+  '  fi' \
   '  [[ -z $has || $has != ${ZI_TEST_FORCE_MISSING_COMMAND:-} ]] || return 0' \
   '  [[ -z $has ]] || (( $+commands[$has] )) || return 0' \
   '  [[ -z $condition ]] || eval "$condition" || return 0' \
@@ -355,6 +369,20 @@ print -rl -- \
   '    fi' \
   '  fi' \
   '  unset ZI_TEST_DEFERRED_CANDIDATE ZI_TEST_DEFERRED_ATLOAD ZI_TEST_DEFERRED_NOCD' \
+  '}' \
+  'function zi_test_run_vivid_program {' \
+  '  [[ -n ${ZI_TEST_VIVID_PROGRAM_DIR:-} ]] || {' \
+  '    print -ru2 -- "Zi fixture did not queue the deferred vivid release program"' \
+  '    return 1' \
+  '  }' \
+  '  local previous_dir=$PWD' \
+  '  cd -- "$ZI_TEST_VIVID_PROGRAM_DIR" || return' \
+  '  {' \
+  '    path=( "$PWD" "${path[@]}" )' \
+  '    [[ -z ${ZI_TEST_VIVID_ATLOAD:-} ]] || eval "$ZI_TEST_VIVID_ATLOAD"' \
+  '  } always {' \
+  '    cd -- "$previous_dir"' \
+  '  }' \
   '}' \
   'unfunction compdef 2>/dev/null' \
   'unset _comps 2>/dev/null' \
@@ -555,6 +583,63 @@ function expect_probe {
   fi
   return 0
 }
+
+# Exercise the production vivid release registration without host cargo/vivid
+# or another deferred integration repairing PATH after the program load.
+vivid_tools_bin=$tmpdir/vivid-tools
+vivid_program_dir=$zi_home/plugins/sharkdp---vivid
+mkdir -p -- $vivid_tools_bin $vivid_program_dir
+ln -s -- ${commands[mkdir]:A} $vivid_tools_bin/mkdir
+print -rl -- "#!$zsh_bin" 'exit 0' >$vivid_tools_bin/rgrc
+chmod +x $vivid_tools_bin/rgrc
+for fixture_program in vivid k9s; do
+  cp -- $homebrew_bin/k9s $vivid_program_dir/$fixture_program
+done
+vivid_command_path=$fixture_bin:$vivid_tools_bin
+vivid_stdout=$tmpdir/vivid-deferred.stdout
+vivid_stderr=$tmpdir/vivid-deferred.stderr
+env -i \
+  HOME=$fixture_home \
+  PATH=$vivid_command_path \
+  SSH_CONNECTION=fixture \
+  TERM=dumb \
+  TERM_PROGRAM=CodexTest \
+  WARP_COMPAT=1 \
+  XDG_CONFIG_HOME=$fixture_config \
+  XDG_DATA_HOME=$fixture_home/.local/share \
+  HOMEBREW_PREFIX=$homebrew_prefix \
+  ZDOTDIR=$fixture_zdotdir \
+  ZI_TEST_VIVID_COMMAND_PATH=$vivid_command_path \
+  $zsh_bin -fic \
+  'source "$1" || exit 1
+   [[ $path[1] == $HOME/.local/lib/secret-exec/bin ]] || {
+     print -ru2 -- "startup did not begin with the managed shim"
+     exit 1
+   }
+   zi_test_run_vivid_program || exit 1
+   integer shim_count=0
+   local entry
+   for entry in "${path[@]}"; do
+     [[ $entry != $HOME/.local/lib/secret-exec/bin ]] || (( ++shim_count ))
+   done
+   local k9s_path=$(whence -p k9s)
+   print -r -- "PATH_FIRST=$path[1]"
+   print -r -- "K9S=${k9s_path:A}"
+   print -r -- "SHIM_COUNT=$shim_count"' \
+  vivid-startup $repo_root/zshrc.zsh \
+  >$vivid_stdout 2>$vivid_stderr || {
+    sed -n '1,120p' $vivid_stderr >&2
+    fail 'the deferred vivid release-program probe failed'
+  }
+grep -Fxq "PATH_FIRST=$shim_dir" $vivid_stdout || {
+  sed -n '1,120p' $vivid_stdout >&2
+  sed -n '1,120p' $vivid_stderr >&2
+  fail 'deferred vivid must keep the managed shim directory first'
+}
+grep -Fxq "K9S=${shim_dir:A}/k9s" $vivid_stdout ||
+  fail 'deferred vivid must resolve k9s through the managed shim'
+grep -Fxq 'SHIM_COUNT=1' $vivid_stdout ||
+  fail 'deferred vivid must keep exactly one shim PATH entry'
 
 expect_probe noninteractive-nonlogin -c 0 1
 expect_probe interactive-nonlogin -ic 1 1
