@@ -186,15 +186,22 @@ while [ "$i" -lt 250 ]; do
   printf '%s\n' 'offline successful startup padding'
   i=$((i + 1))
 done
-printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__'
+read_timeout=1
+if [ -r "$fixture_root/mixed-tail" ]; then
+  printf '%s\n' "$HOME" >"$fixture_root/mixed-home"
+  print -rn -- "$(<"$fixture_root/mixed-tail")"
+  read_timeout=5
+else
+  printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__'
+fi
 i=0
 while [ "$i" -lt 3 ]; do
-  IFS= read -r -t 1 line || reject
+  IFS= read -r -t "$read_timeout" line || reject
   [ "$line" = : ] || reject
   printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__'
   i=$((i + 1))
 done
-IFS= read -r -t 1 line || reject
+IFS= read -r -t "$read_timeout" line || reject
 case "$line" in
   *'SMOKE_READY='*'SMOKE_COMPDEF='*'SMOKE_EXIT=clean'*) ;;
   *) reject ;;
@@ -203,7 +210,7 @@ printf '%s\n' 'SMOKE_READY=1' 'SMOKE_COMPDEF=1' \
   "SMOKE_PATH_FIRST=$HOME/.local/lib/secret-exec/bin" \
   "SMOKE_K9S=$HOME/.local/lib/secret-exec/bin/k9s" \
   'SMOKE_SHIM_COUNT=1' 'SMOKE_EXIT=clean' '__UPSTREAM_SMOKE_PROMPT__'
-IFS= read -r -t 1 line || reject
+IFS= read -r -t "$read_timeout" line || reject
 [ "$line" = exit ] || reject
 printf '%s\n' "OFFLINE_SUCCESS_EXIT_$ordinal"
 exit 0
@@ -320,6 +327,102 @@ done
 grep -Fxq 'zi_head_at_exit=unavailable:checkout-not-observed' "$tmpdir/early-evidence/result.txt" ||
   fail 'pre-startup failure must identify its unavailable Zi checkout'
 print -r -- 'upstream smoke available identity checks passed'
+
+# Retained native tail: 363 bytes, seven markers, and no final LF.
+{
+  print -rn -- $'\x1bP$f{"hook": "SourcedRcFileForWarp", "value": { "shell": "zsh", "uname": "Darwin" }}\x9c%'
+  printf '%78s' ''
+  print -rn -- $'\r \r\r__UPSTREAM_SMOKE_PROMPT__\x1b[?2004h'
+  repeat 6 print -rn -- $'\r\r__UPSTREAM_SMOKE_PROMPT__'
+} >"$tmpdir/mixed-tail"
+env -i HOME=$tmpdir/home ZDOTDIR=$tmpdir/home PATH=/usr/bin:/bin \
+  LANG=C LC_CTYPE=C.UTF-8 "$zsh_bin" -f -c 'letter=é; [[ ${#letter} == 1 ]]' ||
+  fail 'mixed-byte fixture requires an effective C.UTF-8 character locale'
+
+# Model only the witnessed malformed final prompt line. Zsh's character
+# decoding follows LC_ALL, LC_CTYPE, then LANG; the environment stays intact.
+ln -s -- "${commands[grep]:A}" "$tmpdir/bin/real-grep"
+rm -f -- "$tmpdir/bin/grep" "$tmpdir/successful-startups"
+cat >"$tmpdir/bin/grep" <<'SH'
+#!/usr/bin/zsh -f
+emulate -L zsh
+fixture_root=${0%/bin/grep}
+letter=$'\xc3\xa9'
+utf8_ctype=0
+if [[ ${#letter} == 1 ]] && [[ $(printf '%d' "'$letter") == 233 ]]; then
+  utf8_ctype=1
+fi
+unsetopt multibyte
+input=
+if (( $# == 3 )) && [[ $2 == __UPSTREAM_SMOKE_PROMPT__ ]]; then
+  input=$3
+elif (( $# == 4 )) && [[ $2 == -- && $3 == __UPSTREAM_SMOKE_PROMPT__ ]]; then
+  input=$4
+fi
+if (( utf8_ctype )) && [[ ( $1 == -Fq || $1 == -Fo ) &&
+  -n $input && -f $input && -r $fixture_root/mixed-tail ]]; then
+  tail=$(<"$fixture_root/mixed-tail")
+  content=$(<"$input")
+  if [[ ${content##*$'\n'} == "$tail" &&
+    ${content%"$tail"} != *'__UPSTREAM_SMOKE_PROMPT__'* ]]; then
+    exit 1
+  fi
+fi
+exec "$fixture_root/bin/real-grep" "$@"
+SH
+chmod +x "$tmpdir/bin/grep"
+mkdir -p -- "$tmpdir/mixed-evidence"
+env -i HOME=$tmpdir/home ZDOTDIR=$tmpdir/home PATH=$tmpdir/bin \
+  LANG=C LC_CTYPE=C.UTF-8 TMPDIR=$tmpdir/success-scratch \
+  UPSTREAM_SMOKE_PROMPT_TIMEOUT_SECONDS=1 \
+  UPSTREAM_SMOKE_EVIDENCE_DIR=$tmpdir/mixed-evidence \
+  "$zsh_bin" -f "$repo_root/tests/upstream-smoke.zsh" \
+  >"$tmpdir/mixed.stdout" 2>"$tmpdir/mixed.stderr" &
+smoke_pid=$!
+ticks=0
+smoke_status=0
+while kill -0 -- $smoke_pid 2>/dev/null; do
+  sleep 0.05
+  (( ++ticks < 200 )) || fail 'mixed-byte smoke exceeded ten seconds'
+done
+wait $smoke_pid || smoke_status=$?
+smoke_pid=0
+[[ ! -e $tmpdir/bin/unexpected-call ]] ||
+  fail 'the mixed-byte fixture received an unexpected call'
+(( smoke_status == 0 )) ||
+  fail "mixed-byte smoke must complete with exit status 0; found $smoke_status"
+grep -Fxq 'upstream Zi smoke checks passed' "$tmpdir/mixed.stdout" ||
+  fail 'mixed-byte smoke must reach the successful command exit'
+for record in status=0 phase=complete startup_1=available startup_2=available \
+  cleanup_status=0 pty_cleanup_status=0 fixture_cleanup_status=0; do
+  grep -Fxq "$record" "$tmpdir/mixed-evidence/result.txt" ||
+    fail "mixed-byte smoke must record $record"
+done
+IFS= read -r mixed_home <"$tmpdir/mixed-home" || fail 'mixed-byte fixture did not record its input home'
+for ordinal in 1 2; do
+  transcript=$tmpdir/mixed-evidence/startup-$ordinal.stdout
+  [[ -f $transcript && ! -h $transcript ]] ||
+    fail "mixed-byte smoke must retain startup-$ordinal.stdout"
+  {
+    print -r -- "OFFLINE_SUCCESS_STARTUP_$ordinal"
+    repeat 250 print -r -- 'offline successful startup padding'
+    print -rn -- "$(<"$tmpdir/mixed-tail")"
+    repeat 3 print -r -- '__UPSTREAM_SMOKE_PROMPT__'
+    print -rl -- 'SMOKE_READY=1' 'SMOKE_COMPDEF=1' \
+      "SMOKE_PATH_FIRST=$mixed_home/.local/lib/secret-exec/bin" \
+      "SMOKE_K9S=$mixed_home/.local/lib/secret-exec/bin/k9s" \
+      'SMOKE_SHIM_COUNT=1' 'SMOKE_EXIT=clean' '__UPSTREAM_SMOKE_PROMPT__'
+    print -r -- "OFFLINE_SUCCESS_EXIT_$ordinal"
+  } | tr -d '\r' >"$tmpdir/mixed-expected.stdout"
+  tr -d '\r' <"$transcript" >"$tmpdir/mixed-observed.stdout"
+  cmp -s -- "$tmpdir/mixed-expected.stdout" "$tmpdir/mixed-observed.stdout" ||
+    fail "mixed-byte smoke must retain the complete startup-$ordinal.stdout transcript"
+done
+typeset -a mixed_leftovers=( "$tmpdir/success-scratch"/*(ND) )
+(( ${#mixed_leftovers} == 0 )) || fail 'mixed-byte smoke must remove its disposable fixture'
+rm -f -- "$tmpdir/mixed-tail" "$tmpdir/bin/grep"
+ln -s -- "${commands[grep]:A}" "$tmpdir/bin/grep"
+print -r -- 'upstream smoke mixed-byte evidence checks passed'
 
 cp -- "$tmpdir/failing-startup" "$tmpdir/bin/zsh"
 rm -f -- "$tmpdir/bin/rm"
