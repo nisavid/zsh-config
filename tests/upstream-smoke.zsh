@@ -134,7 +134,7 @@ function count_fixed_string_occurrences {
   local input=$2
   integer count=0
 
-  count=$(grep -Fo -- "$needle" "$input" 2>/dev/null | wc -l) || count=0
+  count=$(LC_ALL=C grep -Fo -- "$needle" "$input" 2>/dev/null | wc -l) || count=0
   REPLY=$count
 }
 
@@ -264,7 +264,7 @@ function run_startup {
     service_startup_output \
       "$name" "$output" "$compinit_prompt" "$compinit_prompts_answered"
     compinit_prompts_answered=$REPLY
-    grep -Fq "$prompt_marker" "$output" 2>/dev/null && break
+    LC_ALL=C grep -Fq "$prompt_marker" "$output" 2>/dev/null && break
     sleep 0.05
     if (( ++ticks >= prompt_timeout_ticks )); then
       fail_startup "$name" "$output" \
@@ -316,7 +316,7 @@ function run_startup {
     compinit_prompts_answered=$REPLY
     count_fixed_string_occurrences "$prompt_marker" "$output"
     prompt_count_after=$REPLY
-    if grep -Fq 'SMOKE_EXIT=clean' "$output" 2>/dev/null &&
+    if LC_ALL=C grep -Fq 'SMOKE_EXIT=clean' "$output" 2>/dev/null &&
       (( prompt_count_after > prompt_count_before )); then
       break
     fi
@@ -347,17 +347,17 @@ function run_startup {
   drain_startup_output "$name" "$output"
 
   smoke_phase=startup-$ordinal/assertions
-  grep -Fq 'SMOKE_READY=1' "$output" ||
+  LC_ALL=C grep -Fq 'SMOKE_READY=1' "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal did not load Zi"
-  grep -Fq 'SMOKE_COMPDEF=1' "$output" ||
+  LC_ALL=C grep -Fq 'SMOKE_COMPDEF=1' "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal did not initialize compdef"
-  grep -Fq "SMOKE_PATH_FIRST=$shim_dir" "$output" ||
+  LC_ALL=C grep -Fq "SMOKE_PATH_FIRST=$shim_dir" "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal displaced the secret-exec shim"
-  grep -Fq "SMOKE_K9S=${shim_dir:A}/k9s" "$output" ||
+  LC_ALL=C grep -Fq "SMOKE_K9S=${shim_dir:A}/k9s" "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal resolved k9s outside the shim"
-  grep -Fq 'SMOKE_SHIM_COUNT=1' "$output" ||
+  LC_ALL=C grep -Fq 'SMOKE_SHIM_COUNT=1' "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal produced duplicate managed PATH entries"
-  grep -Fq 'SMOKE_EXIT=clean' "$output" ||
+  LC_ALL=C grep -Fq 'SMOKE_EXIT=clean' "$output" ||
     fail_startup "$name" "$output" "interactive startup $ordinal did not reach clean exit"
   zpty -d "$name" || true
 }
