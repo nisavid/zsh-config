@@ -180,12 +180,7 @@ if [ -f "$fixture_root/successful-startups" ]; then
   ordinal=2
 fi
 printf '%s\n' "$ordinal" >"$fixture_root/successful-startups"
-zmodload zsh/datetime
-typeset -F completion_ready_at=0
-if [ -f "$fixture_root/defer-completion" ]; then
-  completion_ready_at=$(( EPOCHREALTIME + 1 ))
-  if [ "$ordinal" = 1 ]; then /usr/bin/sleep 1.1; fi
-fi
+integer completion_probes=0
 printf '%s\n' "OFFLINE_SUCCESS_STARTUP_$ordinal"
 i=0
 while [ "$i" -lt 250 ]; do
@@ -202,9 +197,8 @@ else
   printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__'
 fi
 while true; do
-  IFS= read -r -t "$read_timeout" line || reject
+  IFS= read -r -t "$read_timeout" line || exit 97
   integer fixture_compdef=1
-  (( EPOCHREALTIME >= completion_ready_at )) || fixture_compdef=0
   if [ -f "$fixture_root/never-completion" ]; then fixture_compdef=0; fi
   case "$line" in
     :) printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__' ;;
@@ -212,6 +206,10 @@ while true; do
       marker=${line#*\"}
       marker=${marker%%=*}
       [[ $marker == __UPSTREAM_SMOKE_COMPDEF_<1->__ ]] || reject
+      (( ++completion_probes ))
+      if [ -f "$fixture_root/defer-completion" ] && [ "$completion_probes" -eq 1 ]; then
+        fixture_compdef=0
+      fi
       printf '%s\n' "$marker=$fixture_compdef" '__UPSTREAM_SMOKE_PROMPT__'
       ;;
     *'SMOKE_READY='*'SMOKE_COMPDEF='*'SMOKE_EXIT=clean'*) break ;;
@@ -454,6 +452,12 @@ for ordinal in 1 2; do
   transcript=$tmpdir/deferred-evidence/startup-$ordinal.stdout
   [[ -f $transcript && ! -h $transcript ]] ||
     fail "deferred-completion smoke must retain startup-$ordinal.stdout"
+  pending_reply=$(grep -nFm1 '__UPSTREAM_SMOKE_COMPDEF_1__=0' "$transcript") ||
+    fail 'deferred-completion smoke must observe pending completion'
+  ready_reply=$(grep -nFm1 '__UPSTREAM_SMOKE_COMPDEF_2__=1' "$transcript") ||
+    fail 'deferred-completion smoke must observe completion on its next probe'
+  (( ${pending_reply%%:*} < ${ready_reply%%:*} )) ||
+    fail 'deferred-completion smoke must retain pending then ready replies in order'
   grep -Fq 'SMOKE_COMPDEF=1' "$transcript" ||
     fail 'deferred-completion smoke must sample initialized completion'
 done
