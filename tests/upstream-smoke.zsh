@@ -200,6 +200,7 @@ function fail_startup {
 [[ -n $zsh_bin ]] || fail 'zsh startup command is required'
 (( $+commands[git] )) || fail 'git is required'
 zmodload zsh/zpty || fail 'zsh/zpty is required'
+zmodload zsh/datetime || fail 'zsh/datetime is required'
 smoke_zpty_ready=1
 autoload -Uz is-at-least
 is-at-least 5.9 || fail "Zsh 5.9 or newer is required; found $ZSH_VERSION"
@@ -301,6 +302,39 @@ function run_startup {
     done
     zpty -t "$name" || fail_startup "$name" "$output" \
       "interactive startup $ordinal exited during deferred prompt cycle $prompt_cycle"
+  done
+
+  smoke_phase=startup-$ordinal/completion
+  integer completion_probe=0
+  local completion_marker
+  local -F completion_deadline=$(( EPOCHREALTIME + 60 ))
+  while true; do
+    completion_marker=__UPSTREAM_SMOKE_COMPDEF_$(( ++completion_probe ))__
+    count_fixed_string_occurrences "$prompt_marker" "$output"
+    prompt_count_before=$REPLY
+    zpty -w "$name" "print -r -- \"$completion_marker=\${+functions[compdef]}\"" ||
+      fail_startup "$name" "$output" "could not check completion readiness for $name"
+
+    while zpty -t "$name"; do
+      service_startup_output \
+        "$name" "$output" "$compinit_prompt" "$compinit_prompts_answered"
+      compinit_prompts_answered=$REPLY
+      (( EPOCHREALTIME < completion_deadline )) ||
+        fail_startup "$name" "$output" \
+          "interactive startup $ordinal did not initialize compdef within one minute"
+      count_fixed_string_occurrences "$prompt_marker" "$output"
+      prompt_count_after=$REPLY
+      if (( prompt_count_after > prompt_count_before )) &&
+        { LC_ALL=C grep -Fq "$completion_marker=0" "$output" 2>/dev/null ||
+          LC_ALL=C grep -Fq "$completion_marker=1" "$output" 2>/dev/null; }; then
+        break
+      fi
+      sleep 0.05
+    done
+    zpty -t "$name" || fail_startup "$name" "$output" \
+      "interactive startup $ordinal exited before completion initialized"
+    LC_ALL=C grep -Fq "$completion_marker=1" "$output" 2>/dev/null && break
+    sleep 0.05
   done
 
   count_fixed_string_occurrences "$prompt_marker" "$output"

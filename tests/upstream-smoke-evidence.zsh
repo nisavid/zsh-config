@@ -180,6 +180,7 @@ if [ -f "$fixture_root/successful-startups" ]; then
   ordinal=2
 fi
 printf '%s\n' "$ordinal" >"$fixture_root/successful-startups"
+integer completion_probes=0
 printf '%s\n' "OFFLINE_SUCCESS_STARTUP_$ordinal"
 i=0
 while [ "$i" -lt 250 ]; do
@@ -187,6 +188,7 @@ while [ "$i" -lt 250 ]; do
   i=$((i + 1))
 done
 read_timeout=1
+if [ -f "$fixture_root/never-completion" ]; then read_timeout=5; fi
 if [ -r "$fixture_root/mixed-tail" ]; then
   printf '%s\n' "$HOME" >"$fixture_root/mixed-home"
   print -rn -- "$(<"$fixture_root/mixed-tail")"
@@ -194,19 +196,27 @@ if [ -r "$fixture_root/mixed-tail" ]; then
 else
   printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__'
 fi
-i=0
-while [ "$i" -lt 3 ]; do
-  IFS= read -r -t "$read_timeout" line || reject
-  [ "$line" = : ] || reject
-  printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__'
-  i=$((i + 1))
+while true; do
+  IFS= read -r -t "$read_timeout" line || exit 97
+  integer fixture_compdef=1
+  if [ -f "$fixture_root/never-completion" ]; then fixture_compdef=0; fi
+  case "$line" in
+    :) printf '%s\n' '__UPSTREAM_SMOKE_PROMPT__' ;;
+    'print -r -- "__UPSTREAM_SMOKE_COMPDEF_'*'=${+functions[compdef]}"')
+      marker=${line#*\"}
+      marker=${marker%%=*}
+      [[ $marker == __UPSTREAM_SMOKE_COMPDEF_<1->__ ]] || reject
+      (( ++completion_probes ))
+      if [ -f "$fixture_root/defer-completion" ] && [ "$completion_probes" -eq 1 ]; then
+        fixture_compdef=0
+      fi
+      printf '%s\n' "$marker=$fixture_compdef" '__UPSTREAM_SMOKE_PROMPT__'
+      ;;
+    *'SMOKE_READY='*'SMOKE_COMPDEF='*'SMOKE_EXIT=clean'*) break ;;
+    *) reject ;;
+  esac
 done
-IFS= read -r -t "$read_timeout" line || reject
-case "$line" in
-  *'SMOKE_READY='*'SMOKE_COMPDEF='*'SMOKE_EXIT=clean'*) ;;
-  *) reject ;;
-esac
-printf '%s\n' 'SMOKE_READY=1' 'SMOKE_COMPDEF=1' \
+printf '%s\n' 'SMOKE_READY=1' "SMOKE_COMPDEF=$fixture_compdef" \
   "SMOKE_PATH_FIRST=$HOME/.local/lib/secret-exec/bin" \
   "SMOKE_K9S=$HOME/.local/lib/secret-exec/bin/k9s" \
   'SMOKE_SHIM_COUNT=1' 'SMOKE_EXIT=clean' '__UPSTREAM_SMOKE_PROMPT__'
@@ -245,6 +255,7 @@ for ordinal in 1 2; do
     print -r -- "OFFLINE_SUCCESS_STARTUP_$ordinal"
     repeat 250 print -r -- 'offline successful startup padding'
     repeat 4 print -r -- '__UPSTREAM_SMOKE_PROMPT__'
+    print -rl -- '__UPSTREAM_SMOKE_COMPDEF_1__=1' '__UPSTREAM_SMOKE_PROMPT__'
     print -rl -- 'SMOKE_READY=1' 'SMOKE_COMPDEF=1' \
       'SMOKE_PATH_FIRST=FIXTURE_SHIM' 'SMOKE_K9S=FIXTURE_K9S' \
       'SMOKE_SHIM_COUNT=1' 'SMOKE_EXIT=clean' '__UPSTREAM_SMOKE_PROMPT__'
@@ -268,10 +279,11 @@ grep -Fxq 'phase=complete' "$tmpdir/success-evidence/result.txt" ||
 function run_evidence_case {
   emulate -L zsh
   setopt nounset err_return pipefail
-  local name=$1 prompt_timeout=$2
-  mkdir -p -- "$tmpdir/$name-scratch" "$tmpdir/$name-evidence"
+  local name=$1 prompt_timeout=$2 scratch_name=${3:-$1}
+  local max_ticks=${4:-200}
+  mkdir -p -- "$tmpdir/$scratch_name-scratch" "$tmpdir/$name-evidence"
   env -i HOME=$tmpdir/home ZDOTDIR=$tmpdir/home PATH=$tmpdir/bin \
-    TMPDIR=$tmpdir/$name-scratch UPSTREAM_SMOKE_PROMPT_TIMEOUT_SECONDS=$prompt_timeout \
+    TMPDIR=$tmpdir/$scratch_name-scratch UPSTREAM_SMOKE_PROMPT_TIMEOUT_SECONDS=$prompt_timeout \
     UPSTREAM_SMOKE_EVIDENCE_DIR=$tmpdir/$name-evidence \
     "$zsh_bin" -f "$repo_root/tests/upstream-smoke.zsh" \
     >"$tmpdir/$name.stdout" 2>"$tmpdir/$name.stderr" &
@@ -280,7 +292,7 @@ function run_evidence_case {
   typeset -g case_status=0
   while kill -0 -- $smoke_pid 2>/dev/null; do
     sleep 0.05
-    (( ++ticks < 200 )) || fail "$name smoke exceeded ten seconds"
+    (( ++ticks < max_ticks )) || fail "$name smoke exceeded its fixture deadline"
   done
   wait $smoke_pid || case_status=$?
   smoke_pid=0
@@ -408,6 +420,7 @@ for ordinal in 1 2; do
     repeat 250 print -r -- 'offline successful startup padding'
     print -rn -- "$(<"$tmpdir/mixed-tail")"
     repeat 3 print -r -- '__UPSTREAM_SMOKE_PROMPT__'
+    print -rl -- '__UPSTREAM_SMOKE_COMPDEF_1__=1' '__UPSTREAM_SMOKE_PROMPT__'
     print -rl -- 'SMOKE_READY=1' 'SMOKE_COMPDEF=1' \
       "SMOKE_PATH_FIRST=$mixed_home/.local/lib/secret-exec/bin" \
       "SMOKE_K9S=$mixed_home/.local/lib/secret-exec/bin/k9s" \
@@ -423,6 +436,60 @@ typeset -a mixed_leftovers=( "$tmpdir/success-scratch"/*(ND) )
 rm -f -- "$tmpdir/mixed-tail" "$tmpdir/bin/grep"
 ln -s -- "${commands[grep]:A}" "$tmpdir/bin/grep"
 print -r -- 'upstream smoke mixed-byte evidence checks passed'
+
+rm -f -- "$tmpdir/successful-startups"
+touch "$tmpdir/defer-completion"
+run_evidence_case deferred 2 success
+[[ ! -e $tmpdir/bin/unexpected-call ]] ||
+  fail 'the deferred-completion fixture received an unexpected call'
+(( case_status == 0 )) || fail 'smoke must wait for deferred completion before sampling startup'
+for record in status=0 phase=complete startup_1=available startup_2=available \
+  cleanup_status=0 pty_cleanup_status=0 fixture_cleanup_status=0; do
+  grep -Fxq "$record" "$tmpdir/deferred-evidence/result.txt" ||
+    fail "deferred-completion smoke must record $record"
+done
+for ordinal in 1 2; do
+  transcript=$tmpdir/deferred-evidence/startup-$ordinal.stdout
+  [[ -f $transcript && ! -h $transcript ]] ||
+    fail "deferred-completion smoke must retain startup-$ordinal.stdout"
+  pending_reply=$(grep -nFm1 '__UPSTREAM_SMOKE_COMPDEF_1__=0' "$transcript") ||
+    fail 'deferred-completion smoke must observe pending completion'
+  ready_reply=$(grep -nFm1 '__UPSTREAM_SMOKE_COMPDEF_2__=1' "$transcript") ||
+    fail 'deferred-completion smoke must observe completion on its next probe'
+  (( ${pending_reply%%:*} < ${ready_reply%%:*} )) ||
+    fail 'deferred-completion smoke must retain pending then ready replies in order'
+  grep -Fq 'SMOKE_COMPDEF=1' "$transcript" ||
+    fail 'deferred-completion smoke must sample initialized completion'
+done
+rm -f -- "$tmpdir/defer-completion"
+print -r -- 'upstream smoke deferred-completion checks passed'
+
+rm -f -- "$tmpdir/successful-startups"
+touch "$tmpdir/never-completion"
+integer completion_wait_started=$SECONDS
+run_evidence_case missing-completion 2 success 1400
+integer completion_wait_elapsed=$(( SECONDS - completion_wait_started ))
+[[ ! -e $tmpdir/bin/unexpected-call ]] ||
+  fail 'the missing-completion fixture received an unexpected call'
+(( case_status == 1 )) || fail 'missing completion must remain a smoke failure'
+(( completion_wait_elapsed >= 59 && completion_wait_elapsed <= 70 )) ||
+  fail "missing completion must fail at its one-minute deadline; elapsed $completion_wait_elapsed seconds"
+grep -Fq 'interactive startup 1 did not initialize compdef within one minute' \
+  "$tmpdir/missing-completion.stderr" || fail 'missing completion must explain its deadline'
+for record in status=1 phase=startup-1/completion startup_1=available \
+  startup_2=unavailable:not-produced cleanup_status=0 pty_cleanup_status=0 \
+  fixture_cleanup_status=0; do
+  grep -Fxq "$record" "$tmpdir/missing-completion-evidence/result.txt" ||
+    fail "missing completion must record $record"
+done
+[[ -f $tmpdir/missing-completion-evidence/startup-1.stdout &&
+  ! -h $tmpdir/missing-completion-evidence/startup-1.stdout ]] ||
+  fail 'missing completion must retain its available transcript'
+if grep -Fq 'SMOKE_EXIT=clean' "$tmpdir/missing-completion-evidence/startup-1.stdout"; then
+  fail 'missing completion must not reach the final smoke probe'
+fi
+rm -f -- "$tmpdir/never-completion"
+print -r -- 'upstream smoke missing-completion deadline checks passed'
 
 cp -- "$tmpdir/failing-startup" "$tmpdir/bin/zsh"
 rm -f -- "$tmpdir/bin/rm"
